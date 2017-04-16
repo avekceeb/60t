@@ -2,7 +2,9 @@
 USBFLAGS=`pkg-config --cflags libusb-1.0`
 USBLIBS=`pkg-config --libs libusb-1.0`
 
-CFLAGS = -I../include $(USBFLAGS) -Dverbose=1
+CFLAGS = -I../include $(USBFLAGS)
+
+demonize = 1 
 
 ALL:=60t
 
@@ -20,5 +22,5 @@ clean:
 	rm -rf 60t-pkg
 
 60t: daemon.c
-	gcc $(CFLAGS) -o$@ $^ $(USBLIBS)
+	gcc $(CFLAGS) -Ddemonize=$(demonize) -o$@ $^ $(USBLIBS)
 

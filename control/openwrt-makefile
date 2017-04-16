@@ -9,14 +9,12 @@ all: $(ALL)
 clean:
 	rm -f *.o $(ALL) 
 
-src=daemon.c
-
 clean:
 	rm -f *.o $(ALL)
 	rm -rf 60t-pkg
 
-60t:$(src)
-	$(GCC) $(CFLAGS) -I./include -Dopenwrtbuild=1 -o$@ $< $(USBXLIBS)
+60t: daemon.c
+	$(GCC) $(CFLAGS) -I./include -Dopenwrtbuild=1 -Ddemonize=1 -o$@ $^ $(USBXLIBS)
 
 install: 60t 60t.js 60t.html 60t.init
 	install -d $(DESTDIR)

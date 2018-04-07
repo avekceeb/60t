@@ -33,12 +33,6 @@
 
 #include "60T.h"
 
-#define use_lcd 0
-
-#if use_lcd
-    #include "wh1602l-ygk-ct.h"
-#endif
-
 // ---- connections -----
 // inputs:
 #define usbint PD2
@@ -312,6 +306,7 @@ static uint8_t replyBuf[4];
 USB_PUBLIC uchar usbFunctionWrite(uchar *data, uchar len) {
     uchar i = 0;
     while (i < len) {
+        // forward command to 'main' uC
         usart_transmit(data[i++]);
     }
     return i;
@@ -321,12 +316,13 @@ USB_PUBLIC uchar usbFunctionWrite(uchar *data, uchar len) {
 USB_PUBLIC uchar usbFunctionSetup(uchar data[8]) {
     usbRequest_t *rq = (void *)data;
     usbMsgPtr = (usbMsgPtr_t)replyBuf;
-    if (cmd_set == rq->bRequest) {
-        return USB_NO_MSG; // usbFunctionWrite
-    } else if (cmd_get == rq->bRequest) {
-        replyBuf[0] = 'O';
-        replyBuf[1] = 'K';
-        replyBuf[2] = '!';
+    if (usb_cmd_set == rq->bRequest) {
+         // call usbFunctionWrite
+        return USB_NO_MSG;
+    } else if (usb_cmd_get == rq->bRequest) {
+        replyBuf[0] = '6';
+        replyBuf[1] = '0';
+        replyBuf[2] = 'T';
         replyBuf[3] = '\0';
         return 4;
     }

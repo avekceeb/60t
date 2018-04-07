@@ -1,18 +1,26 @@
 .PHONY: clean
 
 mc = atmega8
+programmer = nikolaew
+serialport = /dev/ttyS0
 VUSB = ../vusb
+inc60t =  -I../include
 
 CC = avr-gcc
 COMMON = -mmcu=$(mc)
 CFLAGS = $(COMMON)
-CFLAGS += -Wall -Os -I$(VUSB) -I../include
+CFLAGS += -Wall -Os -I$(VUSB) $(inc60t)
 LDFLAGS = $(COMMON)
 HEX_FLASH_FLAGS = -R .eeprom
 HEX_EEPROM_FLAGS = -j .eeprom
 HEX_EEPROM_FLAGS += --set-section-flags=.eeprom="alloc,load"
 HEX_EEPROM_FLAGS += --change-section-lma .eeprom=0
 
+TARGETS = main.hex receiver.hex
+
+ifdef usbcli
+	TARGETS += 60t2-usb-cli
+endif
 
 define buildflash
 	avr-objcopy -O ihex $(HEX_FLASH_FLAGS) $(1).elf $(1).hex
@@ -24,26 +32,26 @@ endef
 
 receiverobjects = $(VUSB)/usbdrvasm.o $(VUSB)/usbdrv.o $(VUSB)/oddebug.o receiver.o
 
-all: main.hex receiver.hex
+all: $(TARGETS)
 
 $(receiverobjects): $(VUSB)/usbconfig.h
 
 main.hex: main.o
-	$(CC) $(LDFLAGS) $< $(LIBDIRS) $(LIBS) -o main.elf
-	$(call buildflash,main)
+	@$(CC) $(LDFLAGS) $< $(LIBDIRS) $(LIBS) -o main.elf
+	@$(call buildflash,main)
 
 receiver.hex: $(receiverobjects)
-	$(CC) $(CFLAGS) $(LDFLAGS) $^ $(LIBDIRS) $(LIBS) -o receiver.elf
-	$(call buildflash,receiver)
+	@$(CC) $(CFLAGS) $(LDFLAGS) $^ $(LIBDIRS) $(LIBS) -o receiver.elf
+	@$(call buildflash,receiver)
 
 %.o: %.c
-	$(CC) $(CFLAGS) -c $< -o $@
+	@$(CC) $(CFLAGS) -c $< -o $@
 
 %.o: %.S
-	$(CC) $(CFLAGS) -x assembler-with-cpp -c $< -o $@
+	@$(CC) $(CFLAGS) -x assembler-with-cpp -c $< -o $@
 
 clean:
-	-rm -rf $(receiverobjects) *.o *.lss *.S *.elf dep/ *.hex *.eep *.bin
+	-rm -rf $(receiverobjects) *.o *.lss *.S *.elf dep/ *.hex *.eep *.bin 60t2-usb-cli
 
 -include $(shell mkdir dep 2>/dev/null) $(wildcard dep/*)
 
@@ -53,9 +61,8 @@ ifndef program
 endif
 
 flash: checkname $(program).hex
-	stty 9600 ignbrk -brkint -icrnl -imaxbel -opost -isig -icanon -iexten -echo noflsh </dev/ttyS0
-	avrdude -b 9660 -p $(mc) -c nikolaew -P /dev/ttyS0 -v -U flash:w:$(program).hex:i
+	stty 9600 ignbrk -brkint -icrnl -imaxbel -opost -isig -icanon -iexten -echo noflsh <$(serialport)
+	avrdude -b 9660 -p $(mc) -c $(programmer) -P $(serialport) -v -U flash:w:$(program).hex:i
 
-60tcli:
-	gcc -o $@ 60t-usb-cli.c -lusb-1.0 
-
+60t2-usb-cli: 60t2-usb-cli.c
+	gcc -o $@ $^ $(inc60t) -lusb-1.0 

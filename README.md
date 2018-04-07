@@ -8,3 +8,12 @@
 ## 60T2
 
     2 x ATmega8 controlled via NEC protocol
+
+-----------------
+
+### Build
+
+    apt-get install gcc-avr avr-libc binutils-avr avrdude
+    # 60T2 - optionally (for usb connection)
+    apt-get install libusb-1.0-0-dev
+    cd 60t/60t2 ; make clean ; make

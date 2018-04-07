@@ -6,9 +6,8 @@
 // 8 bit ; 1 stop ; no parity ; asynchronous
 #define usart_mode (_BV(URSEL) | _BV(UCSZ1) | _BV(UCSZ0))
 
-// usb flags from wrt variant:
-#define cmd_set 0xA0
-#define cmd_get 0xB0
+#define usb_cmd_set ((uint8_t)0xA0)
+#define usb_cmd_get ((uint8_t)0xB0)
 
 // ---- helpers ------
 #define set_bit(port,bit)   (port |= _BV(bit))

@@ -167,7 +167,8 @@ struct Step dance[16] = {
 };
 
 void do_dance() {
-    for (uint8_t i=0; i<16; i++) {
+    uint8_t i;
+    for (i=0; i<16; i++) {
         distance_reached = 0;
         bridge_set(dance[i].where, speed, dance[i].howmuch);
         while (!distance_reached) {
@@ -208,6 +209,7 @@ startover:
     TIMSK = 0;
     // Counter0:
     // External clock source on T0 pin. Clock on rising edge
+    // TODO: try to count on low level
     TCCR0 = _BV(CS02) | _BV(CS01) | _BV(CS00);
     // Counter1: normal mode
     // External clock source on T1 pin. Clock on rising edge

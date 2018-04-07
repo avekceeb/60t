@@ -1,0 +1,25 @@
+
+CFLAGS=-O -Wall -Iinclude -Dopenwrtbuild=1
+USBXLIBS=-lusb-1.0
+
+ALL:=60t
+
+all: $(ALL)
+
+clean:
+	rm -f *.o $(ALL) 
+
+clean:
+	rm -f *.o $(ALL)
+	rm -rf 60t-pkg
+
+60t: daemon.c
+	$(GCC) $(CFLAGS) -I./include -Dopenwrtbuild=1 -Ddemonize=1 -o$@ $^ $(USBXLIBS)
+
+install: 60t 60t.js 60t.html 60t.init
+	install -d $(DESTDIR)
+	install 60t $(DESTDIR)/60t
+	install 60t.js $(DESTDIR)/60t.js
+	install 60t.init $(DESTDIR)/60t.init
+	install 60t.html $(DESTDIR)/60t.html
+

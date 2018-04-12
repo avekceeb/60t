@@ -41,6 +41,7 @@ int main(int argc, char **argv) {
     libusb_device_handle *handle = NULL;
     int bts = 0;
     uint8_t buffer[256];
+    struct Report *report;
     int res = 0;
     uint8_t cmd;
     int rq;
@@ -75,7 +76,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    for (int a=0; a<argc-2; a++) {
+    for (int a=1; a<argc; a++) {
         switch ((uint8_t)argv[a][0]) {
             case 'f':
                 cmd = cmd_test_fwd;
@@ -111,6 +112,7 @@ int main(int argc, char **argv) {
         }
 
         buffer[0] = (uint8_t)(cmd);
+        printf ("Executing command: %c (0x%02x)\n", argv[a][0], cmd);
 
         bts = libusb_control_transfer(handle, RQOUT, usb_cmd_set,
                 0, 0, (uint8_t*)buffer, 1/*len*/, usb_timeout_ms);
@@ -123,7 +125,28 @@ int main(int argc, char **argv) {
                 0, 0, (uint8_t*)buffer, 16/*sizeof(buffer)*/, usb_timeout_ms);
         print_usb_status(bts);
         if (bts > 0 && bts < 255) {
-            printf("replied: %s\n", buffer);
+            report = (struct Report *)(buffer);
+            printf("------------------\n"
+                "\tCommand = 0x%02x\n"
+                "\tRight   = %d\n"
+                "\tLeft    = %d\n"
+                "\tBridge  = 0x%02x\n"
+                "\tSpeed   = %d\n"
+                "\tFwd     = %d\n"
+                "\tBkw     = %d\n"
+                "\tTurn    = %d\n",
+                report->command,
+                report->enc_right,
+                report->enc_left,
+                report->direction,
+                report->speed,
+                report->distance_fwd,
+                report->distance_bkw,
+                report->distance_turn
+                );
+        printf("press button...");
+        rq = getchar();
+
         }
     }
 

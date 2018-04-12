@@ -60,3 +60,15 @@ struct Step {
     uint8_t where;
     uint8_t howmuch;
 };
+
+struct Report {
+    uint8_t enc_left;
+    uint8_t enc_right;
+    uint8_t speed;
+    uint8_t direction;
+    uint8_t command;
+    uint8_t distance_bkw;
+    uint8_t distance_fwd;
+    uint8_t distance_turn;
+};
+    

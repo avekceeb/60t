@@ -83,6 +83,7 @@
 #define led_on_all  (PORTD |= (_BV(ledL) | _BV(ledR)))
 #define led_off_all  (PORTD &= ~(_BV(ledL) | _BV(ledR)))
 
+// TODO: use 'state' struct istead of separate vars;
 // ---- mc state kept in globals ------------------
 uint8_t speed;
 // direction is actually just a h-bridge combination
@@ -92,6 +93,8 @@ uint8_t newcommand;
 uint8_t distance_bkw, distance_fwd, distance_turn;
 // flag for step-by-step execution
 uint8_t distance_reached;
+//--------------------------------------------------
+struct Report state;
 //--------------------------------------------------
 
 void sleep1ms() { _delay_ms(1); }
@@ -123,12 +126,17 @@ void bridge_set(uint8_t _dir, uint8_t _speed, uint8_t _dist) {
 
 // shaft encoder L Timer0 - 8bit
 ISR (TIMER0_OVF_vect) { // vector 9
+    // save state info before clearing:
+    state.enc_left = TCNT0;
+    state.enc_right = TCNT1L;
     led_on_left;
     bridge_stop();
     distance_reached = 1;
 }
 // shaft encoder R Timer1 - 16bit
 ISR (TIMER1_OVF_vect) { // vector 8
+    state.enc_left = TCNT0;
+    state.enc_right = TCNT1L;
     led_on_right;
     bridge_stop();
     distance_reached = 1;
@@ -136,6 +144,7 @@ ISR (TIMER1_OVF_vect) { // vector 8
 
 ISR(USART_RXC_vect) { // vector 11
     command = UDR;
+    state.command = command;
     newcommand = 0x01;
 }
 
@@ -179,6 +188,15 @@ void do_dance() {
     }
 }
 
+void usart_report_state() {
+    uint8_t i = 0;
+    uint8_t *p = (uint8_t*)(&state);
+    for (; i<8; i++) {
+        while (!(UCSRA & _BV(UDRE)));
+        UDR = p[i];
+    }
+}
+
 int main(void) {
 
 startover:
@@ -197,8 +215,8 @@ startover:
     // configure USART
     UBRRH = (uint8_t)(ubrr>>8);
     UBRRL = (uint8_t)ubrr;
-    // Enable receiverand Rx Int
-    UCSRB = _BV(RXEN) | _BV(RXCIE); // | _BV(TXEN) | TXIE
+    // Enable Rx, Tx, RxInt
+    UCSRB = _BV(RXEN) | _BV(RXCIE) | _BV(TXEN); // | TXIE
     // 8 bit ; 1 stop ; no parity ; asynchronous
     UCSRC = _BV(URSEL) | _BV(UCSZ1) | _BV(UCSZ0);
 
@@ -231,6 +249,13 @@ startover:
     direction = break_all_cmd;
     command = cmd_invalid;
     newcommand = 0x00;
+
+    state.direction = direction;
+    state.command = command;
+    state.distance_bkw = distance_bkw;
+    state.distance_fwd = distance_fwd;
+    state.distance_turn = distance_turn;
+    state.speed = speed;
 
     led_on_all;
 
@@ -303,6 +328,13 @@ startover:
                     do_dance();
                     break;
             } // switch
+            state.direction = direction;
+            state.distance_bkw = distance_bkw;
+            state.distance_fwd = distance_fwd;
+            state.distance_turn = distance_turn;
+            state.speed = speed;
+            
+            usart_report_state();
             
         } // if new command
         

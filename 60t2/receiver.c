@@ -300,7 +300,7 @@ void usart_transmit(uint8_t data) {
 /************************************************************/
 // vUSB
 
-static uint8_t replyBuf[4];
+static uint8_t replyBuf[8];
 
 // from host ---> to uC
 USB_PUBLIC uchar usbFunctionWrite(uchar *data, uchar len) {
@@ -320,20 +320,30 @@ USB_PUBLIC uchar usbFunctionSetup(uchar data[8]) {
          // call usbFunctionWrite
         return USB_NO_MSG;
     } else if (usb_cmd_get == rq->bRequest) {
-        replyBuf[0] = '6';
-        replyBuf[1] = '0';
-        replyBuf[2] = 'T';
-        replyBuf[3] = '\0';
-        return 4;
+        return 8;
     }
     return 0;
 }
+
+/************************************************************/
+
+uint8_t rx_index;
+
+ISR (USART_RXC_vect) {
+    if (rx_index >= 8) {
+        rx_index = 0;
+    }
+    replyBuf[rx_index++] = UDR;
+}
+
 /************************************************************/
 
 struct IR_Packet received_packet;
 
 int main(void) {
 
+    rx_index = 0;
+    
     // 1) configure IO ports
     PORTD = 0;
     DDRD = ~(_BV(PD2));
@@ -344,7 +354,7 @@ int main(void) {
     // 4) configure USART
     UBRRH = (uint8_t)(ubrr>>8);
     UBRRL = (uint8_t)ubrr;
-    UCSRB = _BV(TXEN); // | _BV(RXEN) | _BV(RXCIE);
+    UCSRB = _BV(TXEN) | _BV(RXEN) | _BV(RXCIE);
     UCSRC = usart_mode;
 
     usbInit();

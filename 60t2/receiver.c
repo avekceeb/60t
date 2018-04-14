@@ -300,7 +300,7 @@ void usart_transmit(uint8_t data) {
 /************************************************************/
 // vUSB
 
-static uint8_t replyBuf[8];
+static uint8_t replyBuf[ReportSize];
 
 // from host ---> to uC
 USB_PUBLIC uchar usbFunctionWrite(uchar *data, uchar len) {
@@ -313,14 +313,14 @@ USB_PUBLIC uchar usbFunctionWrite(uchar *data, uchar len) {
 }
 
 // from uC ---> host
-USB_PUBLIC uchar usbFunctionSetup(uchar data[8]) {
+USB_PUBLIC uchar usbFunctionSetup(uchar data[ReportSize]) {
     usbRequest_t *rq = (void *)data;
     usbMsgPtr = (usbMsgPtr_t)replyBuf;
     if (usb_cmd_set == rq->bRequest) {
          // call usbFunctionWrite
         return USB_NO_MSG;
     } else if (usb_cmd_get == rq->bRequest) {
-        return 8;
+        return ReportSize;
     }
     return 0;
 }
@@ -330,7 +330,7 @@ USB_PUBLIC uchar usbFunctionSetup(uchar data[8]) {
 uint8_t rx_index;
 
 ISR (USART_RXC_vect) {
-    if (rx_index >= 8) {
+    if (rx_index >= ReportSize) {
         rx_index = 0;
     }
     replyBuf[rx_index++] = UDR;

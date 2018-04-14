@@ -128,21 +128,27 @@ int main(int argc, char **argv) {
             report = (struct Report *)(buffer);
             printf("------------------\n"
                 "\tCommand = 0x%02x\n"
-                "\tRight   = %d\n"
-                "\tLeft    = %d\n"
+                "\tRunning = %d\n"
+                "\tDone    = %d\n"
                 "\tBridge  = 0x%02x\n"
-                "\tSpeed   = %d\n"
+                "\tTicks L = %d\n"
+                "\tTicks R = %d\n"
+                "\tSpeed L = %d\n"
+                "\tSpeed R = %d\n"
                 "\tFwd     = %d\n"
                 "\tBkw     = %d\n"
                 "\tTurn    = %d\n",
                 report->command,
-                report->enc_right,
-                report->enc_left,
+                report->running,
+                report->step_done,
                 report->direction,
-                report->speed,
-                report->distance_fwd,
-                report->distance_bkw,
-                report->distance_turn
+                report->ticks_l,
+                report->ticks_r,
+                report->speed_l,
+                report->speed_r,
+                report->step_bkw,
+                report->step_fwd,
+                report->step_turn
                 );
         printf("press button...");
         rq = getchar();

@@ -35,8 +35,8 @@
 #define cmd_left button_begin
 #define cmd_right button_end
 
-#define cmd_speedup button_level_plus
-#define cmd_slowdown button_level_minus
+#define cmd_speedup_right button_level_plus
+#define cmd_speedup_left button_level_minus
 
 // distance commands:
 #define cmd_test_stop button_5
@@ -62,13 +62,19 @@ struct Step {
 };
 
 struct Report {
-    uint8_t enc_left;
-    uint8_t enc_right;
-    uint8_t speed;
+    uint8_t ticks_l;
+    uint8_t ticks_r;
+    uint8_t speed_l;
+    uint8_t speed_r;
     uint8_t direction;
     uint8_t command;
-    uint8_t distance_bkw;
-    uint8_t distance_fwd;
-    uint8_t distance_turn;
+    uint8_t running;
+    uint8_t step_done;
+    uint8_t step_bkw;
+    uint8_t step_fwd;
+    uint8_t step_turn;
 };
+
+#define ReportSize (sizeof(struct Report))
+ 
     

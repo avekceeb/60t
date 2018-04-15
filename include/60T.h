@@ -51,6 +51,8 @@
 #define cmd_restart button_sync
 #define cmd_program button_prog
 
+#define cmd_display button_index
+
 #define distance_weel_round ((uint8_t)6)
 #define distance_fwd_default (uint8_t)(distance_weel_round*3)
 #define distance_bkw_default (uint8_t)(distance_weel_round*2)

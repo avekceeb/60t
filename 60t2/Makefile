@@ -5,6 +5,9 @@ programmer = nikolaew
 serialport = /dev/ttyS0
 VUSB = ../vusb
 inc60t =  -I../include
+ifdef use_lcd
+inc60t += -Duse_lcd=1
+endif
 
 CC = avr-gcc
 COMMON = -mmcu=$(mc)

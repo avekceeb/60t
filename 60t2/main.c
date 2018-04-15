@@ -25,7 +25,9 @@
 // TODO: if command arrives
 // in the middle of 'running' previous ???
 
-#define use_lcd 1
+#ifdef use_lcd
+    #define use_lcd 1
+#endif
 #define use_led 0
 #define F_CPU 12000000UL
 
@@ -84,9 +86,14 @@ uint8_t distance_bkw, distance_fwd, distance_turn;
 void sleep50us() { _delay_us(50); }
 void sleep1ms() { _delay_ms(1); }
 void sleep20ms() { _delay_ms(20); }
- void sleep1s() { _delay_ms(1000); }
+void sleep1s() { _delay_ms(1000); }
 
-void display_state();
+#if use_lcd 
+    void _display_state();
+    #define display_state _display_state()
+#else
+    #define display_state
+#endif
 
 void bridge_stop() {
     state.ticks_l = 0;
@@ -114,7 +121,7 @@ void bridge_set(uint8_t _dir, uint8_t _speed_l, uint8_t _speed_r, uint8_t _dist)
 ISR(INT0_vect) {
     sleep50us();
     if (state.ticks_l++ >= distance) {
-        display_state();
+        display_state;
         //led_on_left;
         bridge_stop();
         state.step_done = 1;
@@ -125,7 +132,7 @@ ISR(INT0_vect) {
 ISR(INT1_vect) {
     sleep50us();
     if (state.ticks_r++ >= distance) {
-        display_state();
+        display_state;
         //led_on_right;
         bridge_stop();
         state.step_done = 1;
@@ -271,7 +278,7 @@ void lcd_init() {
 char lcd_up_buffer[18];
 char lcd_lo_buffer[18];
 
-void display_state() {
+void _display_state() {
     sprintf (lcd_lo_buffer, "%02x %02x %02x:%02x %02x%02x",
                             state.cmds_cnt,
                             state.command,
@@ -305,7 +312,11 @@ startover:
     // pull-ups for inputs
     PORTD = _BV(rxd) | _BV(encL) | _BV(encR);
     // set outputs:
+#if use_lcd
     DDRB = _BV(pwmL) | _BV(pwmR) | _BV(en_bit) | _BV(rs_bit);
+#else
+    DDRB = _BV(pwmL) | _BV(pwmR);
+#endif
     DDRC = _BV(fwdR) | _BV(bkwR) | _BV(fwdL) | _BV(bkwL);
 
 //#if use_led
@@ -375,10 +386,13 @@ startover:
             encoder_stop_all;
 
             switch(state.command) {
+                case cmd_display:
+                    display_state;
+                    break;
                 case cmd_stop:
                 case cmd_test_stop:
                     bridge_stop();
-                    display_state();
+                    display_state;
                     break;
                 case cmd_fwd:
                     bridge_set(move_fwd_cmd, state.speed_l, state.speed_r, 0);

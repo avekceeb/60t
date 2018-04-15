@@ -73,6 +73,7 @@ struct Report {
     uint8_t step_bkw;
     uint8_t step_fwd;
     uint8_t step_turn;
+    uint8_t cmds_cnt;
 };
 
 #define ReportSize (sizeof(struct Report))

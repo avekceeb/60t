@@ -18,7 +18,7 @@
 #define cyr_a   0x61
 #define cyr_s   0x63
 #define cyr_e   0x65
-#define cyr_k   0x6b
+//#define cyr_k   0x6b
 #define cyr_o   0x6f
 #define cyr_r   0x70
 #define cyr_u   0x79

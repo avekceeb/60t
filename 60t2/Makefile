@@ -66,3 +66,7 @@ flash: checkname $(program).hex
 
 60t2-usb-cli: 60t2-usb-cli.c
 	gcc -o $@ $^ $(inc60t) -lusb-1.0 
+
+dist:
+	mv main.hex working-firmware/main.`date +%Y-%m-%d`
+	mv receiver.hex working-firmware/receiver.`date +%Y-%m-%d`

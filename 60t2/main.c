@@ -7,14 +7,14 @@
   [reply] <------ (TXD) PD1 -| 3     26|- PC3 (ADC3) ----> fwd R
   enc L -------->(INT0) PD2 -| 4     25|- PC2 (ADC2) ----> bkw R
   enc R -------->(INT1) PD3 -| 5     24|- PC1 (ADC1) ----> fwd L
-               (XCK/T0) PD4 -| 6     23|- PC0 (ADC0) ----> bkw L
+  lcd:d4 <---- (XCK/T0) PD4 -| 6     23|- PC0 (ADC0) ----> bkw L
                         VCC -| 7     22|- GND
                         GND -| 8     21|- AREF
           (XTAL1/TOSC1) PB6 -| 9     20|- AVCC
           (XTAL2/TOSC2) PB7 -|10     19|- PB5 (SCK)
-                   (T1) PD5 -|11     18|- PB4 (MISO)
-  led L <------- (AIN0) PD6 -|12     17|- PB3 (MOSI/OC2)
-  led R <------- (AIN1) PD7 -|13     16|- PB2 (SS/OC1B) ----> pwm L
+  lcd:d5 <------   (T1) PD5 -|11     18|- PB4 (MISO)     ----> lcd:rs
+  lcd:d6 <------ (AIN0) PD6 -|12     17|- PB3 (MOSI/OC2) ----> lcd:en
+  lcd:d7 <------ (AIN1) PD7 -|13     16|- PB2 (SS/OC1B) ----> pwm L
                  (ICP1) PB0 -|14     15|- PB1 (OC1A)    ----> pwm R
                              +---------+
 
@@ -25,13 +25,19 @@
 // TODO: if command arrives
 // in the middle of 'running' previous ???
 
-
+#define use_lcd 1
+#define use_led 0
 #define F_CPU 12000000UL
+
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <util/delay.h>
 #include "60T.h"
+#if use_lcd
+    #include "wh1602l-ygk-ct.h"
+#endif
 
 // ---- connections -----
 // inputs:
@@ -43,8 +49,6 @@
 #define txd  PD1
 #define fwdR PD3
 #define bkwR PD2
-#define ledL PD6
-#define ledR PD7
 
 #define fwdL PC1
 #define bkwL PC0
@@ -62,11 +66,6 @@
 #define bridge_set_speed(__l, __r)  reg_pwm_l = __l;\
                                     reg_pwm_r = __r
 
-#define led_on_left  (PORTD |= _BV(ledL))
-#define led_on_right (PORTD |= _BV(ledR))
-#define led_on_all   (PORTD |= (_BV(ledL) | _BV(ledR)))
-#define led_off_all  (PORTD &= ~(_BV(ledL) | _BV(ledR)))
-
 //--------------------------------------------------
 struct Report state;
 //--------------------------------------------------
@@ -75,23 +74,21 @@ uint8_t distance;
 uint8_t distance_bkw, distance_fwd, distance_turn;
 
 #define encoder_start_all GICR = (_BV(INT0) | _BV(INT1))
-// TODO: disable timer, not interrupt
 #define encoder_stop_all GICR = 0;\
                          distance = 0
 #define encoder_stop_left GICR &= ~(_BV(INT0))
 #define encoder_stop_right GICR &= ~(_BV(INT1))
 
-// ---- transmission settings
 #define encoder_set(x)   distance = ((uint8_t)x)
 
 void sleep50us() { _delay_us(50); }
 void sleep1ms() { _delay_ms(1); }
-void sleep1s() { _delay_ms(600); }
+void sleep20ms() { _delay_ms(20); }
+ void sleep1s() { _delay_ms(1000); }
+
+void display_state();
 
 void bridge_stop() {
-    // Note: since there is only one source of EN command
-    // to both sides (pwm) all rotations supposed to be
-    // symmetrical
     state.ticks_l = 0;
     state.ticks_r = 0;
     state.direction = break_all_cmd;
@@ -117,7 +114,8 @@ void bridge_set(uint8_t _dir, uint8_t _speed_l, uint8_t _speed_r, uint8_t _dist)
 ISR(INT0_vect) {
     sleep50us();
     if (state.ticks_l++ >= distance) {
-        led_on_left;
+        display_state();
+        //led_on_left;
         bridge_stop();
         state.step_done = 1;
     }
@@ -127,7 +125,8 @@ ISR(INT0_vect) {
 ISR(INT1_vect) {
     sleep50us();
     if (state.ticks_r++ >= distance) {
-        led_on_right;
+        display_state();
+        //led_on_right;
         bridge_stop();
         state.step_done = 1;
     }
@@ -174,6 +173,7 @@ void do_dance() {
             if (state.running) break;
             sleep1ms();
         }
+        state.cmds_cnt++;
         sleep1s();
     }
 }
@@ -200,6 +200,103 @@ void timer1_init(void) {
     OCR1B = 0x00;
 }
 
+// ---------------------------------------------------------
+#if use_lcd
+#define en_bit PB3
+#define en_port PORTB
+#define en_dir DDRB
+
+#define rs_bit PB4
+#define rs_port PORTB
+#define rs_dir DDRB
+
+#define data_port PORTD
+#define data_dir DDRD
+
+#define data_bits (_BV(PD4)|_BV(PD5)|_BV(PD6)|_BV(PD7))
+
+void en_strobe() {
+    set_bit(en_port, en_bit);
+    sleep1ms();
+    clear_bit(en_port, en_bit);
+    sleep1ms();
+}
+
+void lcd_upper_4bit_command(unsigned char command) {
+    clear_bit(rs_port, rs_bit);
+    data_port = (command & 0xf0) | (data_port & 0x0f);
+    en_strobe();
+}
+
+void lcd_command(unsigned char command) {
+    clear_bit(rs_port, rs_bit);
+    data_port = (command & 0xf0) | (data_port & 0x0f);
+    en_strobe();
+    data_port = ((command<<4) & 0xf0) | (data_port & 0x0f);
+    en_strobe();
+}
+
+void lcd_data(char byte) {
+    set_bit(rs_port, rs_bit);
+    data_port = (byte & 0xf0) | (data_port & 0x0f);
+    en_strobe();
+    data_port = ((byte<<4) & 0xf0) | (data_port & 0x0f);
+    en_strobe();
+}
+
+void lcd_init() {
+    sleep20ms();
+    lcd_upper_4bit_command(lcd_funcset_8bit_2lines_5x8dots);
+    sleep20ms();
+    lcd_upper_4bit_command(lcd_funcset_8bit_2lines_5x8dots);
+    sleep20ms();
+    lcd_upper_4bit_command(lcd_funcset_8bit_2lines_5x8dots);
+    sleep20ms();
+    // switch to 4bit mode
+    lcd_upper_4bit_command(lcd_funcset_4bit_2lines_5x8dots);
+    sleep20ms();
+    // execute commands in 4bit mode
+    lcd_command(lcd_funcset_4bit_2lines_5x8dots);
+    sleep20ms();
+    lcd_command(lcd_display_off);
+    sleep20ms();
+    lcd_command(lcd_display_clear);
+    sleep20ms();
+    lcd_command(lcd_entry_mode_cursor_right);
+    sleep20ms();
+    lcd_command(lcd_display_on);
+    sleep20ms();
+}
+
+char lcd_up_buffer[18];
+char lcd_lo_buffer[18];
+
+void display_state() {
+    sprintf (lcd_lo_buffer, "%02x %02x %02x:%02x %02x%02x",
+                            state.cmds_cnt,
+                            state.command,
+                            state.speed_l,
+                            state.speed_r,
+                            state.ticks_l,
+                            state.ticks_r);
+    lcd_command(lcd_goto_lower_line);
+    for (unsigned char i=0;i<16;i++) {
+        lcd_data(lcd_lo_buffer[i]);
+    }
+}
+
+char greet[6] = {
+        cyr_p,
+        cyr_r,
+        cyr_i,
+        cyr_v,
+        cyr_e,
+        cyr_t,
+};
+
+#endif
+
+
 int main(void) {
 
 startover:
@@ -208,9 +305,27 @@ startover:
     // pull-ups for inputs
     PORTD = _BV(rxd) | _BV(encL) | _BV(encR);
     // set outputs:
-    DDRB = _BV(pwmL) | _BV(pwmR);
+    DDRB = _BV(pwmL) | _BV(pwmR) | _BV(en_bit) | _BV(rs_bit);
     DDRC = _BV(fwdR) | _BV(bkwR) | _BV(fwdL) | _BV(bkwL);
-    DDRD = _BV(ledL) | _BV(ledR);
+
+//#if use_led
+    //DDRD = _BV(ledL) | _BV(ledR);
+//#endif
+
+#if use_lcd
+    data_dir |= (data_bits) ;
+    //DDRB |= _BV(en_bit) | _BV(rs_bit);
+    lcd_init();
+    lcd_command(lcd_goto_upper_line);
+    sprintf (lcd_up_buffer, " T cm sl:sr tltr");
+    for (unsigned char i=0;i<16;i++) {
+        lcd_data(lcd_up_buffer[i]);
+    }
+    lcd_command(lcd_goto_lower_line);
+    for (unsigned char i=0; i<6;i++) {
+        lcd_data(greet[i]);
+    }
+#endif
 
     // --- configure encoders -------------------------
     // enable interrupts int0 int1
@@ -231,6 +346,7 @@ startover:
     
     // initial state of h-bridge: stop at full speed
     port_bridge = 0;
+    state.cmds_cnt = 0;
     state.step_done = 0;
     state.speed_l = 0xd0;
     state.speed_r = 0xd0;
@@ -242,15 +358,16 @@ startover:
     state.step_fwd = distance_fwd_default;
     state.step_turn = distance_turn_default;
 
-    led_on_all;
+    //led_on_all;
 
     sei();
 
     while (1) {
 
-        if (state.running) {
-
-            led_off_all;
+        if (state.running) { // new command
+            
+            state.cmds_cnt++;
+            //led_off_all;
             state.running = 0;
             state.step_done = 0;
 
@@ -261,6 +378,7 @@ startover:
                 case cmd_stop:
                 case cmd_test_stop:
                     bridge_stop();
+                    display_state();
                     break;
                 case cmd_fwd:
                     bridge_set(move_fwd_cmd, state.speed_l, state.speed_r, 0);
@@ -325,10 +443,12 @@ startover:
                     do_dance();
                     break;
             } // switch
-            
+
             usart_report_state();
+
+            //display_state();
             
-        } // if new command
+            } // if new command
         
         sleep1ms();
         

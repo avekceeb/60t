@@ -4,7 +4,7 @@
                              +---------+
                 (RESET) PC6 -| 1     28|- PC5 (ADC5/SCL)
   command ------> (RXD) PD0 -| 2     27|- PC4 (ADC4/SDA)
-  [reply] <------ (TXD) PD1 -| 3     26|- PC3 (ADC3) ----> fwd R
+  [reply] <------ (TXD) PD1 -| 3     26|- PC3 (ADC3) ----> fwd R (dirs wrong!)
   enc L -------->(INT0) PD2 -| 4     25|- PC2 (ADC2) ----> bkw R
   enc R -------->(INT1) PD3 -| 5     24|- PC1 (ADC1) ----> fwd L
   lcd:d4 <---- (XCK/T0) PD4 -| 6     23|- PC0 (ADC0) ----> bkw L
@@ -28,7 +28,6 @@
 #ifdef use_lcd
     #define use_lcd 1
 #endif
-#define use_led 0
 #define F_CPU 12000000UL
 
 #include <avr/io.h>
@@ -49,8 +48,9 @@
 
 // outputs:
 #define txd  PD1
-#define fwdR PD3
-#define bkwR PD2
+
+#define fwdR PC3
+#define bkwR PC2
 
 #define fwdL PC1
 #define bkwL PC0
@@ -58,8 +58,8 @@
 #define pwmL  PB2
 #define pwmR  PB1
 
-#define reg_pwm_l OCR1B
-#define reg_pwm_r OCR1A
+#define reg_pwm_r OCR1B
+#define reg_pwm_l OCR1A
 
 #define port_bridge PORTC
 
@@ -72,8 +72,8 @@
 struct Report state;
 //--------------------------------------------------
 
-uint8_t distance;
-uint8_t distance_bkw, distance_fwd, distance_turn;
+uint16_t distance;
+uint16_t distance_bkw, distance_fwd, distance_turn;
 
 #define encoder_start_all GICR = (_BV(INT0) | _BV(INT1))
 #define encoder_stop_all GICR = 0;\
@@ -81,7 +81,7 @@ uint8_t distance_bkw, distance_fwd, distance_turn;
 #define encoder_stop_left GICR &= ~(_BV(INT0))
 #define encoder_stop_right GICR &= ~(_BV(INT1))
 
-#define encoder_set(x)   distance = ((uint8_t)x)
+#define encoder_set(x)   distance = ((uint16_t)x)
 
 void sleep50us() { _delay_us(50); }
 void sleep1ms() { _delay_ms(1); }
@@ -103,7 +103,7 @@ void bridge_stop() {
     bridge_set_direction(state.direction);
 }
 
-void bridge_set(uint8_t _dir, uint8_t _speed_l, uint8_t _speed_r, uint8_t _dist) {
+void bridge_set(uint8_t _dir, uint8_t _speed_l, uint8_t _speed_r, uint16_t _dist) {
     state.direction = _dir;
     state.speed_l = _speed_l;
     state.speed_r = _speed_r;
@@ -117,7 +117,7 @@ void bridge_set(uint8_t _dir, uint8_t _speed_l, uint8_t _speed_r, uint8_t _dist)
     bridge_set_direction(state.direction);
 }
 
-// shaft encoder L Timer0 - 8bit
+// shaft encoder L
 ISR(INT0_vect) {
     sleep50us();
     if (state.ticks_l++ >= distance) {
@@ -128,7 +128,7 @@ ISR(INT0_vect) {
     }
 }
 
-// shaft encoder R Timer1 - 16bit
+// shaft encoder R
 ISR(INT1_vect) {
     sleep50us();
     if (state.ticks_r++ >= distance) {
@@ -139,7 +139,7 @@ ISR(INT1_vect) {
     }
 }
 
-ISR(USART_RXC_vect) { // vector 11
+ISR(USART_RXC_vect) {
     state.command = UDR;
     state.running = 0x01;
 }
@@ -319,13 +319,8 @@ startover:
 #endif
     DDRC = _BV(fwdR) | _BV(bkwR) | _BV(fwdL) | _BV(bkwL);
 
-//#if use_led
-    //DDRD = _BV(ledL) | _BV(ledR);
-//#endif
-
 #if use_lcd
     data_dir |= (data_bits) ;
-    //DDRB |= _BV(en_bit) | _BV(rs_bit);
     lcd_init();
     lcd_command(lcd_goto_upper_line);
     sprintf (lcd_up_buffer, " T cm sl:sr tltr");
@@ -369,8 +364,6 @@ startover:
     state.step_fwd = distance_fwd_default;
     state.step_turn = distance_turn_default;
 
-    //led_on_all;
-
     sei();
 
     while (1) {
@@ -378,7 +371,6 @@ startover:
         if (state.running) { // new command
             
             state.cmds_cnt++;
-            //led_off_all;
             state.running = 0;
             state.step_done = 0;
 
@@ -435,19 +427,19 @@ startover:
                     }
                     break;
                 case cmd_trip_plus:
-                    if (state.step_fwd<(uint8_t)0xff)
+                    if (state.step_fwd<(uint16_t)0xffff)
                         state.step_fwd++;
-                    if (state.step_bkw<(uint8_t)0xff)
+                    if (state.step_bkw<(uint16_t)0xffff)
                         state.step_bkw++;
-                    if (state.step_turn<(uint8_t)0xff)
+                    if (state.step_turn<(uint16_t)0xffff)
                         state.step_turn++;
                     break;
                 case cmd_trip_minus:
-                    if (state.step_fwd>(uint8_t)0x00)
+                    if (state.step_fwd>0)
                         state.step_fwd--;
-                    if (state.step_bkw>(uint8_t)0x00)
+                    if (state.step_bkw>0)
                         state.step_bkw--;
-                    if (state.step_turn>(uint8_t)0x00)
+                    if (state.step_turn>0)
                         state.step_turn--;
                     break;
                 case cmd_restart:
@@ -458,7 +450,8 @@ startover:
                     break;
             } // switch
 
-            usart_report_state();
+            // TODO: use_usb
+            //usart_report_state();
 
             //display_state();
             

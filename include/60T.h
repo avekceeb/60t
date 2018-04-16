@@ -53,28 +53,28 @@
 
 #define cmd_display button_index
 
-#define distance_weel_round ((uint8_t)6)
-#define distance_fwd_default (uint8_t)(distance_weel_round*3)
-#define distance_bkw_default (uint8_t)(distance_weel_round*2)
+#define distance_weel_round ((uint16_t)12)
+#define distance_fwd_default (uint16_t)(distance_weel_round*3)
+#define distance_bkw_default (uint16_t)(distance_weel_round*2)
 #define distance_turn_default (distance_weel_round)
 
 struct Step {
     uint8_t where;
-    uint8_t howmuch;
+    uint16_t howmuch;
 };
 
 struct Report {
-    uint8_t ticks_l;
-    uint8_t ticks_r;
+    uint16_t ticks_l;
+    uint16_t ticks_r;
     uint8_t speed_l;
     uint8_t speed_r;
     uint8_t direction;
     uint8_t command;
     uint8_t running;
     uint8_t step_done;
-    uint8_t step_bkw;
-    uint8_t step_fwd;
-    uint8_t step_turn;
+    uint16_t step_bkw;
+    uint16_t step_fwd;
+    uint16_t step_turn;
     uint8_t cmds_cnt;
 };
 

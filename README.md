@@ -17,3 +17,16 @@
     # 60T2 - optionally (for usb connection)
     apt-get install libusb-1.0-0-dev
     cd 60t/60t2 ; make clean ; make
+    # to build usb cli also:
+    make usbcli=1
+    # to build with LCD debug:
+    make use_led=1
+
+### TODO:
+- NEC as separate module
+- Proximity sensor
+- up-down both pwm
+- l-r speed ?
+- receiver: cmd ; wait for finish (req queue)
+- increase frequency of shaft encoder
+ 

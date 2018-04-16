@@ -4,7 +4,8 @@ mc = atmega8
 programmer = nikolaew
 serialport = /dev/ttyS0
 VUSB = ../vusb
-inc60t =  -I../include
+NEC = ../nec
+inc60t = -I../include
 ifdef use_lcd
 inc60t += -Duse_lcd=1
 endif
@@ -12,7 +13,7 @@ endif
 CC = avr-gcc
 COMMON = -mmcu=$(mc)
 CFLAGS = $(COMMON)
-CFLAGS += -Wall -Os -I$(VUSB) $(inc60t)
+CFLAGS += -Wall -Os -I$(NEC) $(inc60t)
 LDFLAGS = $(COMMON)
 HEX_FLASH_FLAGS = -R .eeprom
 HEX_EEPROM_FLAGS = -j .eeprom
@@ -33,7 +34,12 @@ define buildflash
 	stat -c "%n : %s bytes"  $(1).bin
 endef
 
-receiverobjects = $(VUSB)/usbdrvasm.o $(VUSB)/usbdrv.o $(VUSB)/oddebug.o receiver.o
+receiverobjects = $(NEC)/ir-nec.o receiver.o
+
+ifdef use_usb
+	CFLAGS += -I$(VUSB) -Duse_usb=1
+	receiverobjects = $(VUSB)/usbdrvasm.o $(VUSB)/usbdrv.o $(VUSB)/oddebug.o $(NEC)/ir-nec.o receiver.o
+endif
 
 all: $(TARGETS)
 
@@ -44,14 +50,14 @@ main.hex: main.o
 	@$(call buildflash,main)
 
 receiver.hex: $(receiverobjects)
-	@$(CC) $(CFLAGS) $(LDFLAGS) $^ $(LIBDIRS) $(LIBS) -o receiver.elf
-	@$(call buildflash,receiver)
+	$(CC) $(CFLAGS) $(LDFLAGS) $^ $(LIBDIRS) $(LIBS) -o receiver.elf
+	$(call buildflash,receiver)
 
 %.o: %.c
-	@$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -c $< -o $@
 
 %.o: %.S
-	@$(CC) $(CFLAGS) -x assembler-with-cpp -c $< -o $@
+	$(CC) $(CFLAGS) -x assembler-with-cpp -c $< -o $@
 
 clean:
 	-rm -rf $(receiverobjects) *.o *.lss *.S *.elf dep/ *.hex *.eep *.bin 60t2-usb-cli

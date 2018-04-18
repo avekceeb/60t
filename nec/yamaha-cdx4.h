@@ -37,7 +37,7 @@
 
 #define button_repeat 0x08
 #define button_pause 0x55
-#define button_random 0x16
+#define button_random 0x1b
 
 #define button_begin 0x04
 #define button_play 0x02

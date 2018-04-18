@@ -25,9 +25,9 @@
 // TODO: if command arrives
 // in the middle of 'running' previous ???
 
-#ifdef use_lcd
-    #define use_lcd 1
-#endif
+//#ifdef use_lcd
+    //#define use_lcd 1
+//#endif
 #define F_CPU 12000000UL
 
 #include <avr/io.h>
@@ -36,8 +36,8 @@
 #include <stdio.h>
 #include <util/delay.h>
 #include "60T.h"
-#if use_lcd
-    #include "wh1602l-ygk-ct.h"
+#ifdef use_lcd
+    #include "lcd.h"
 #endif
 
 // ---- connections -----
@@ -71,6 +71,8 @@
 //--------------------------------------------------
 struct Report state;
 //--------------------------------------------------
+uint8_t prescale_for_t0;
+uint16_t timer0_ovf;
 
 uint16_t distance;
 uint16_t distance_bkw, distance_fwd, distance_turn;
@@ -83,24 +85,57 @@ uint16_t distance_bkw, distance_fwd, distance_turn;
 
 #define encoder_set(x)   distance = ((uint16_t)x)
 
-void sleep50us() { _delay_us(50); }
-void sleep1ms() { _delay_ms(1); }
-void sleep20ms() { _delay_ms(20); }
-void sleep1s() { _delay_ms(1000); }
+void pause_for_jitter() {
+    _delay_us(20);
+}
 
-#if use_lcd 
+void pause_after_command() {
+    _delay_ms(1);
+}
+
+void pause_after_step() {
+    _delay_ms(1000);
+}
+
+#ifdef use_lcd 
     void _display_state();
     #define display_state _display_state()
 #else
     #define display_state
 #endif
 
+void disable_sync() {
+    TIMSK &= ~(_BV(TOIE0));
+    TCCR0 = 0;
+    TCNT0 = 0;
+}
+
+void enable_sync() {
+    TIMSK |= _BV(TOIE0);
+    TCCR0 = prescale_for_t0;
+    TCNT0 = 0;
+}
+
+// timer 0
+void switch_speed_sync() {
+    if (state.sync) {
+        disable_sync();
+        state.sync = 0;
+    } else {
+        enable_sync();
+        state.sync = 1;
+    }
+}
+
 void bridge_stop() {
+    state.running = 0;
     state.ticks_l = 0;
     state.ticks_r = 0;
     state.direction = break_all_cmd;
     bridge_set_speed(0, 0);
     bridge_set_direction(state.direction);
+    disable_sync();
+
 }
 
 void bridge_set(uint8_t _dir, uint8_t _speed_l, uint8_t _speed_r, uint16_t _dist) {
@@ -115,14 +150,20 @@ void bridge_set(uint8_t _dir, uint8_t _speed_l, uint8_t _speed_r, uint16_t _dist
     }
     bridge_set_speed(state.speed_l, state.speed_r);
     bridge_set_direction(state.direction);
+    state.running = 1;
+    if (state.sync) {
+        enable_sync();
+    }
 }
 
 // shaft encoder L
 ISR(INT0_vect) {
-    sleep50us();
+    pause_for_jitter();
     if (state.ticks_l++ >= distance) {
+        // here we disable it quickly
+        // this also be repeated in bridge_stop
+        disable_sync();
         display_state;
-        //led_on_left;
         bridge_stop();
         state.step_done = 1;
     }
@@ -130,18 +171,20 @@ ISR(INT0_vect) {
 
 // shaft encoder R
 ISR(INT1_vect) {
-    sleep50us();
+    pause_for_jitter();
     if (state.ticks_r++ >= distance) {
+        // here we disable it quickly
+        // this also be repeated in bridge_stop
+        disable_sync();
         display_state;
-        //led_on_right;
         bridge_stop();
         state.step_done = 1;
     }
 }
 
 ISR(USART_RXC_vect) {
+    // TODO: try blocking mode - hold before current command finishes
     state.command = UDR;
-    state.running = 0x01;
 }
 
 struct Step dance[16] = {
@@ -177,11 +220,11 @@ void do_dance() {
         state.step_done = 0;
         bridge_set(dance[i].where, state.speed_l, state.speed_r, dance[i].howmuch);
         while (!state.step_done) {
-            if (state.running) break;
-            sleep1ms();
+            if (state.command) break;
+            pause_after_command();
         }
         state.cmds_cnt++;
-        sleep1s();
+        pause_after_step();
     }
 }
 
@@ -209,79 +252,24 @@ void timer1_init(void) {
 
 // ---------------------------------------------------------
 #if use_lcd
-#define en_bit PB3
-#define en_port PORTB
-#define en_dir DDRB
-
-#define rs_bit PB4
-#define rs_port PORTB
-#define rs_dir DDRB
-
-#define data_port PORTD
-#define data_dir DDRD
-
-#define data_bits (_BV(PD4)|_BV(PD5)|_BV(PD6)|_BV(PD7))
-
-void en_strobe() {
-    set_bit(en_port, en_bit);
-    sleep1ms();
-    clear_bit(en_port, en_bit);
-    sleep1ms();
-}
-
-void lcd_upper_4bit_command(unsigned char command) {
-    clear_bit(rs_port, rs_bit);
-    data_port = (command & 0xf0) | (data_port & 0x0f);
-    en_strobe();
-}
-
-void lcd_command(unsigned char command) {
-    clear_bit(rs_port, rs_bit);
-    data_port = (command & 0xf0) | (data_port & 0x0f);
-    en_strobe();
-    data_port = ((command<<4) & 0xf0) | (data_port & 0x0f);
-    en_strobe();
-}
-
-void lcd_data(char byte) {
-    set_bit(rs_port, rs_bit);
-    data_port = (byte & 0xf0) | (data_port & 0x0f);
-    en_strobe();
-    data_port = ((byte<<4) & 0xf0) | (data_port & 0x0f);
-    en_strobe();
-}
-
-void lcd_init() {
-    sleep20ms();
-    lcd_upper_4bit_command(lcd_funcset_8bit_2lines_5x8dots);
-    sleep20ms();
-    lcd_upper_4bit_command(lcd_funcset_8bit_2lines_5x8dots);
-    sleep20ms();
-    lcd_upper_4bit_command(lcd_funcset_8bit_2lines_5x8dots);
-    sleep20ms();
-    // switch to 4bit mode
-    lcd_upper_4bit_command(lcd_funcset_4bit_2lines_5x8dots);
-    sleep20ms();
-    // execute commands in 4bit mode
-    lcd_command(lcd_funcset_4bit_2lines_5x8dots);
-    sleep20ms();
-    lcd_command(lcd_display_off);
-    sleep20ms();
-    lcd_command(lcd_display_clear);
-    sleep20ms();
-    lcd_command(lcd_entry_mode_cursor_right);
-    sleep20ms();
-    lcd_command(lcd_display_on);
-    sleep20ms();
-}
 
 char lcd_up_buffer[18];
 char lcd_lo_buffer[18];
+char greet[6] = {cyr_p, cyr_r, cyr_i, cyr_v, cyr_e, cyr_t};
 
 void _display_state() {
-    sprintf (lcd_lo_buffer, "%02x %02x %02x:%02x %02x%02x",
+    sprintf (lcd_up_buffer, "c:%02x o:%04x %c%c%c ",
                             state.cmds_cnt,
-                            state.command,
+                            timer0_ovf,
+                            state.running ? 'R' : ' ',
+                            state.step_done ? 'D' : ' ',
+                            state.sync ? 'S' : ' '
+                            );
+    lcd_command(lcd_goto_upper_line);
+    for (unsigned char i=0;i<16;i++) {
+        lcd_data(lcd_up_buffer[i]);
+    }
+    sprintf (lcd_lo_buffer, "%02x:%02x  %04x:%04x",
                             state.speed_l,
                             state.speed_r,
                             state.ticks_l,
@@ -292,17 +280,34 @@ void _display_state() {
     }
 }
 
-char greet[6] = {
-        cyr_p,
-        cyr_r,
-        cyr_i,
-        cyr_v,
-        cyr_e,
-        cyr_t,
-};
-
 #endif
 
+// speed sync timer
+ISR(TIMER0_OVF_vect) {
+    timer0_ovf++;
+    if ((!state.running) || (!state.sync)) {
+        return;
+    }
+    int16_t dif = state.ticks_r - state.ticks_l;
+    if (dif > speed_disbalance) {
+        if (state.speed_l < speed_upper) {
+            state.speed_l += speed_step;
+        }
+        if (state.speed_r > speed_lower) {
+            state.speed_r -= speed_step;
+        }
+    } else if (dif < -speed_disbalance) {
+        if (state.speed_l > speed_lower) {
+            state.speed_l -= speed_step;
+        } 
+        if (state.speed_r < speed_upper) {
+            state.speed_r += speed_step;
+        }
+    } else {
+        return;
+    }
+    bridge_set_speed(state.speed_l, state.speed_r);
+}
 
 int main(void) {
 
@@ -312,22 +317,12 @@ startover:
     // pull-ups for inputs
     PORTD = _BV(rxd) | _BV(encL) | _BV(encR);
     // set outputs:
-#if use_lcd
-    DDRB = _BV(pwmL) | _BV(pwmR) | _BV(en_bit) | _BV(rs_bit);
-#else
     DDRB = _BV(pwmL) | _BV(pwmR);
-#endif
     DDRC = _BV(fwdR) | _BV(bkwR) | _BV(fwdL) | _BV(bkwL);
 
 #if use_lcd
-    data_dir |= (data_bits) ;
     lcd_init();
     lcd_command(lcd_goto_upper_line);
-    sprintf (lcd_up_buffer, " T cm sl:sr tltr");
-    for (unsigned char i=0;i<16;i++) {
-        lcd_data(lcd_up_buffer[i]);
-    }
-    lcd_command(lcd_goto_lower_line);
     for (unsigned char i=0; i<6;i++) {
         lcd_data(greet[i]);
     }
@@ -336,7 +331,7 @@ startover:
     // --- configure encoders -------------------------
     // enable interrupts int0 int1
     GIMSK = _BV(INT0) | _BV(INT1);
-    // The falling edge of INT1,2 generates an interrupt request
+    // The falling edge of INT0 and INT1 generates an interrupt request
     MCUCR = _BV(ISC11) | _BV(ISC01);
 
     // ---- configure USART ---------------------------
@@ -352,39 +347,44 @@ startover:
     
     // initial state of h-bridge: stop at full speed
     port_bridge = 0;
+    
     state.cmds_cnt = 0;
     state.step_done = 0;
-    state.speed_l = 0xd0;
-    state.speed_r = 0xd0;
+    state.speed_l = speed_default;
+    state.speed_r = speed_default;
     state.direction = break_all_cmd;
-    state.command = cmd_invalid;
-    state.running = 0x00;
-
+    state.command = 0;
+    state.running = 0;
+    state.sync = 0;
     state.step_bkw = distance_bkw_default;
     state.step_fwd = distance_fwd_default;
     state.step_turn = distance_turn_default;
 
+    prescale_for_t0 = t0_prescale_1024;
+    timer0_ovf = 0;
+
     sei();
 
+    uint8_t command;
     while (1) {
 
-        if (state.running) { // new command
+        if (state.command) { // new command
             
             state.cmds_cnt++;
+            command = state.command;
+            state.command = 0;
             state.running = 0;
             state.step_done = 0;
 
             // stop even if it is not movement command
             encoder_stop_all;
 
-            switch(state.command) {
+            switch(command) {
                 case cmd_display:
-                    display_state;
                     break;
                 case cmd_stop:
                 case cmd_test_stop:
                     bridge_stop();
-                    display_state;
                     break;
                 case cmd_fwd:
                     bridge_set(move_fwd_cmd, state.speed_l, state.speed_r, 0);
@@ -409,6 +409,22 @@ startover:
                     break;
                 case cmd_test_right:
                     bridge_set(turn_right_cmd, state.speed_l, state.speed_r, state.step_turn);
+                    break;
+                case cmd_speed_up:
+                    if (state.speed_l < 0xff) {
+                        state.speed_l++;
+                    }
+                    if (state.speed_r < 0xff) {
+                        state.speed_r++;
+                    }
+                    break;
+                case cmd_speed_down:
+                    if (state.speed_l > 0) {
+                        state.speed_l--;
+                    }
+                    if (state.speed_r > 0) {
+                        state.speed_r--;
+                    }
                     break;
                 case cmd_speedup_left:
                     if (state.speed_l < 0xff) {
@@ -442,6 +458,24 @@ startover:
                     if (state.step_turn>0)
                         state.step_turn--;
                     break;
+                case cmd_sync:
+                    switch_speed_sync();
+                    break;
+                case cmd_prescale_1:
+                    prescale_for_t0 = t0_prescale_1;
+                    break;
+                case cmd_prescale_8:
+                    prescale_for_t0 = t0_prescale_8;
+                    break;
+                case cmd_prescale_64:
+                    prescale_for_t0 = t0_prescale_64;
+                    break;
+                case cmd_prescale_256:
+                    prescale_for_t0 = t0_prescale_256;
+                    break;
+                case cmd_prescale_1024:
+                    prescale_for_t0 = t0_prescale_1024;
+                    break;
                 case cmd_restart:
                     goto startover;
                     break;
@@ -450,14 +484,15 @@ startover:
                     break;
             } // switch
 
+            TCCR0 = prescale_for_t0;
             // TODO: use_usb
             //usart_report_state();
 
-            //display_state();
+            display_state;
             
             } // if new command
         
-        sleep1ms();
+        pause_after_command();
         
     } // while
     return 0;

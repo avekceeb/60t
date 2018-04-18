@@ -12,7 +12,6 @@
 #define lcd_goto_upper_line 0b10000000
 #define lcd_goto_lower_line 0b11000000
 
-
 #define space   0x20
 
 #define cyr_a   0x61

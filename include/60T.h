@@ -23,6 +23,26 @@
 #define break_left_mask 0b11111100
 #define break_right_mask 0b11110011
 
+// ----- sync speed settings ------
+//#define speed_diff_threshold 5
+//#define speed_sync_step 3
+#define speed_default 0xc0
+#define speed_min 0xb0
+#define speed_max 0xff
+#define speed_step 1
+#define speed_disbalance 5
+//#define speed_upper (speed_max - speed_step)
+//#define speed_lower (speed_min + speed_step)
+#define speed_upper (0xe0)
+#define speed_lower (0xc0)
+
+#define t0_prescale_1 (_BV(CS00))
+#define t0_prescale_8 (_BV(CS01))
+#define t0_prescale_64 (_BV(CS01)|_BV(CS00))
+#define t0_prescale_256 (_BV(CS02))
+#define t0_prescale_1024 (_BV(CS02)|_BV(CS00))
+
+
 // ----- command codes -------------
 // IR-remote control for Yamaha CDX4
 #include "yamaha-cdx4.h"
@@ -35,8 +55,17 @@
 #define cmd_left button_begin
 #define cmd_right button_end
 
-#define cmd_speedup_right button_level_plus
-#define cmd_speedup_left button_level_minus
+#define cmd_speed_up button_level_plus
+#define cmd_speed_down button_level_minus
+
+#define cmd_speedup_right button_random 
+#define cmd_speedup_left  button_repeat
+
+#define cmd_prescale_1  button_1
+#define cmd_prescale_8  button_3
+#define cmd_prescale_64  button_7
+#define cmd_prescale_256  button_9
+#define cmd_prescale_1024  button_0
 
 // distance commands:
 #define cmd_test_stop button_5
@@ -48,12 +77,13 @@
 #define cmd_trip_plus button_fast_forward
 #define cmd_trip_minus button_fast_backward
 
-#define cmd_restart button_sync
+#define cmd_restart button_open
+#define cmd_sync button_sync
 #define cmd_program button_prog
 
 #define cmd_display button_index
 
-#define distance_weel_round ((uint16_t)12)
+#define distance_weel_round ((uint16_t)30)
 #define distance_fwd_default (uint16_t)(distance_weel_round*3)
 #define distance_bkw_default (uint16_t)(distance_weel_round*2)
 #define distance_turn_default (distance_weel_round)
@@ -70,8 +100,10 @@ struct Report {
     uint8_t speed_r;
     uint8_t direction;
     uint8_t command;
+    // TODO: bit fields
     uint8_t running;
     uint8_t step_done;
+    uint8_t sync;
     uint16_t step_bkw;
     uint16_t step_fwd;
     uint16_t step_turn;

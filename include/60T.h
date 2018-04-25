@@ -1,4 +1,11 @@
 
+
+// --- configurables ----
+#define skip_repeat 1
+//#define use_usb 0
+//#define use_lcd 0
+#define use_service_mode 1
+
 // ---- usart settings ------
 #define baudrate 9600
 // asyncronous normal mode:
@@ -9,9 +16,11 @@
 #define usb_cmd_set ((uint8_t)0xA0)
 #define usb_cmd_get ((uint8_t)0xB0)
 
+
 // ---- helpers ------
 #define set_bit(port,bit)   (port |= _BV(bit))
 #define clear_bit(port,bit) (port &= ~(_BV(bit)))
+
 
 // ---- h-bridge port --------
 #define move_fwd_cmd   0b00001010
@@ -23,6 +32,7 @@
 #define break_left_mask 0b11111100
 #define break_right_mask 0b11110011
 
+
 // ----- sync speed settings ------
 //#define speed_diff_threshold 5
 //#define speed_sync_step 3
@@ -30,11 +40,11 @@
 #define speed_min 0xb0
 #define speed_max 0xff
 #define speed_step 1
-#define speed_disbalance 5
+#define speed_disbalance_default 3
 //#define speed_upper (speed_max - speed_step)
 //#define speed_lower (speed_min + speed_step)
-#define speed_upper (0xe0)
-#define speed_lower (0xc0)
+#define speed_upper_default (0xe0)
+#define speed_lower_default (0xc0)
 
 #define t0_prescale_1 (_BV(CS00))
 #define t0_prescale_8 (_BV(CS01))
@@ -49,11 +59,6 @@
 
 #define cmd_invalid 0x00
 
-#define cmd_stop button_play
-#define cmd_fwd button_pause
-#define cmd_bkw button_stop
-#define cmd_left button_begin
-#define cmd_right button_end
 
 #define cmd_speed_up button_level_plus
 #define cmd_speed_down button_level_minus
@@ -67,7 +72,14 @@
 #define cmd_prescale_256  button_9
 #define cmd_prescale_1024  button_0
 
-// distance commands:
+
+// movement commands:
+#define cmd_stop button_play
+#define cmd_fwd button_pause
+#define cmd_bkw button_stop
+#define cmd_left button_begin
+#define cmd_right button_end
+
 #define cmd_test_stop button_5
 #define cmd_test_fwd button_2
 #define cmd_test_bkw button_8
@@ -77,21 +89,32 @@
 #define cmd_trip_plus button_fast_forward
 #define cmd_trip_minus button_fast_backward
 
-#define cmd_restart button_open
-#define cmd_sync button_sync
+#define cmd_restart button_space
 #define cmd_program button_prog
 
 #define cmd_display button_index
 
-#define distance_weel_round ((uint16_t)30)
-#define distance_fwd_default (uint16_t)(distance_weel_round*3)
-#define distance_bkw_default (uint16_t)(distance_weel_round*2)
+#define distance_weel_round ((uint8_t)20)
+#define distance_fwd_default (uint8_t)(distance_weel_round*3)
+#define distance_bkw_default (uint8_t)(distance_weel_round*2)
 #define distance_turn_default (distance_weel_round)
+
+
+// service mode:
+#define cmd_service_enter      button_sync
+#define cmd_service_leave      button_open
+#define cmd_service_list_up    button_pause
+#define cmd_service_list_down  button_stop
+#define cmd_service_value_up   button_level_plus
+#define cmd_service_value_down button_level_minus
+#define cmd_service_write      button_prog
+
 
 struct Step {
     uint8_t where;
     uint16_t howmuch;
 };
+
 
 struct Report {
     uint16_t ticks_l;
@@ -103,10 +126,9 @@ struct Report {
     // TODO: bit fields
     uint8_t running;
     uint8_t step_done;
-    uint8_t sync;
-    uint16_t step_bkw;
-    uint16_t step_fwd;
-    uint16_t step_turn;
+    //uint16_t step_bkw;
+    //uint16_t step_fwd;
+    //uint16_t step_turn;
     uint8_t cmds_cnt;
 };
 

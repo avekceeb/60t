@@ -1,5 +1,8 @@
 .PHONY: clean
 
+use_lcd = 1
+use_usb = 0
+
 istty = 1
 mc = atmega8
 programmer = nikolaew
@@ -7,15 +10,14 @@ serialport = /dev/ttyS0
 VUSB = ../vusb
 NEC = ../nec
 LCD = ../lcd
-inc60t = -I../include -I$(NEC)
-ifdef use_lcd
-inc60t += -Duse_lcd=1 -I$(LCD)
-endif
+inc60t = -I../include -I$(NEC) -I$(LCD) -I$(VUSB) \
+		-Duse_lcd=$(use_lcd) -Duse_usb=$(use_usb)
+
 
 CC = avr-gcc
 COMMON = -mmcu=$(mc)
 CFLAGS = $(COMMON)
-CFLAGS += -Wall -Os -I$(NEC) $(inc60t)
+CFLAGS += -Wall -Os $(inc60t)
 LDFLAGS = $(COMMON)
 HEX_FLASH_FLAGS = -R .eeprom
 HEX_EEPROM_FLAGS = -j .eeprom
@@ -35,7 +37,7 @@ define green
 	printf "$(_G)%s$(_N)\n" "$(1)"
 endef
 
-ifdef usbcli
+ifeq ($(usbcli),1)
 	TARGETS += 60t2-usb-cli
 endif
 
@@ -50,12 +52,11 @@ endef
 receiverobjects = $(NEC)/ir-nec.o receiver.o
 mainobjects = main.o
 
-ifdef use_usb
-	CFLAGS += -I$(VUSB) -Duse_usb=1
+ifeq ($(use_usb),1)
 	receiverobjects = $(VUSB)/usbdrvasm.o $(VUSB)/usbdrv.o $(VUSB)/oddebug.o $(NEC)/ir-nec.o receiver.o
 endif
 
-ifdef use_lcd
+ifeq ($(use_lcd),1)
 	mainobjects += ../lcd/lcd.o
 endif
 
@@ -64,8 +65,8 @@ all: $(TARGETS)
 $(receiverobjects): $(VUSB)/usbconfig.h
 
 main.hex: $(mainobjects)
-	@$(CC) $(LDFLAGS) $^ $(LIBDIRS) $(LIBS) -o main.elf
-	@$(call buildflash,main)
+	$(CC) $(LDFLAGS) $^ $(LIBDIRS) $(LIBS) -o main.elf
+	$(call buildflash,main)
 
 receiver.hex: $(receiverobjects)
 	$(CC) $(CFLAGS) $(LDFLAGS) $^ $(LIBDIRS) $(LIBS) -o receiver.elf

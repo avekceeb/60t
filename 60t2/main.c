@@ -25,9 +25,6 @@
 // TODO: if command arrives
 // in the middle of 'running' previous ???
 
-//#ifdef use_lcd
-    //#define use_lcd 1
-//#endif
 #define F_CPU 12000000UL
 
 #include <avr/io.h>
@@ -36,7 +33,7 @@
 #include <stdio.h>
 #include <util/delay.h>
 #include "60T.h"
-#ifdef use_lcd
+#if use_lcd
     #include "lcd.h"
 #endif
 
@@ -68,6 +65,37 @@
 #define bridge_set_speed(__l, __r)  reg_pwm_l = __l;\
                                     reg_pwm_r = __r
 
+#define id_pwm 0
+#define id_sync 1
+#define id_pwm_max 2
+#define id_pwm_min 3
+#define id_pwm_disbalance 4
+#define id_tick_to_pwm 5
+#define id_step_fwd 6
+#define id_step_bkw 7
+#define id_step_turn 8
+#define parameter_max 8
+#define parameter_count (parameter_max+1) 
+// TODO: prescale , pause for jitter, pause after command
+uint8_t parameter_current;
+uint8_t parameter_value;
+uint8_t parameters[parameter_count];
+
+#if use_service_mode
+    uint8_t service_mode;
+    char * parameter_names[parameter_count] = {
+        "1: Target PWM   ",
+        "2: PWM L-R sync ",
+        "3: PWM Maximum  ",
+        "4: PWM Minimum  ",
+        "5: PWM Diff     ",
+        "6: Enc To PWM   ",
+        "7: Step Forward ",
+        "8: Step Backward",
+        "9: Step Turn    ",
+    };
+#endif
+
 //--------------------------------------------------
 struct Report state;
 //--------------------------------------------------
@@ -75,7 +103,6 @@ uint8_t prescale_for_t0;
 uint16_t timer0_ovf;
 
 uint16_t distance;
-uint16_t distance_bkw, distance_fwd, distance_turn;
 
 #define encoder_start_all GICR = (_BV(INT0) | _BV(INT1))
 #define encoder_stop_all GICR = 0;\
@@ -83,7 +110,7 @@ uint16_t distance_bkw, distance_fwd, distance_turn;
 #define encoder_stop_left GICR &= ~(_BV(INT0))
 #define encoder_stop_right GICR &= ~(_BV(INT1))
 
-#define encoder_set(x)   distance = ((uint16_t)x)
+#define encoder_set(x) distance = ((uint16_t)x)
 
 void pause_for_jitter() {
     _delay_us(20);
@@ -97,7 +124,7 @@ void pause_after_step() {
     _delay_ms(1000);
 }
 
-#ifdef use_lcd 
+#if use_lcd 
     void _display_state();
     #define display_state _display_state()
 #else
@@ -117,20 +144,19 @@ void enable_sync() {
 }
 
 // timer 0
-void switch_speed_sync() {
-    if (state.sync) {
-        disable_sync();
-        state.sync = 0;
-    } else {
-        enable_sync();
-        state.sync = 1;
-    }
-}
+//void switch_speed_sync() {
+    //if (state.sync) {
+        //disable_sync();
+        //state.sync = 0;
+    //} else {
+        //enable_sync();
+        //state.sync = 1;
+    //}
+//}
+
 
 void bridge_stop() {
     state.running = 0;
-    state.ticks_l = 0;
-    state.ticks_r = 0;
     state.direction = break_all_cmd;
     bridge_set_speed(0, 0);
     bridge_set_direction(state.direction);
@@ -138,10 +164,13 @@ void bridge_stop() {
 
 }
 
+
 void bridge_set(uint8_t _dir, uint8_t _speed_l, uint8_t _speed_r, uint16_t _dist) {
     state.direction = _dir;
     state.speed_l = _speed_l;
     state.speed_r = _speed_r;
+    state.ticks_l = 0;
+    state.ticks_r = 0;
     if (_dist) {
         encoder_set(_dist);
         encoder_start_all;
@@ -151,10 +180,11 @@ void bridge_set(uint8_t _dir, uint8_t _speed_l, uint8_t _speed_r, uint16_t _dist
     bridge_set_speed(state.speed_l, state.speed_r);
     bridge_set_direction(state.direction);
     state.running = 1;
-    if (state.sync) {
+    if (parameters[id_sync]) {
         enable_sync();
     }
 }
+
 
 // shaft encoder L
 ISR(INT0_vect) {
@@ -163,7 +193,6 @@ ISR(INT0_vect) {
         // here we disable it quickly
         // this also be repeated in bridge_stop
         disable_sync();
-        display_state;
         bridge_stop();
         state.step_done = 1;
     }
@@ -176,7 +205,6 @@ ISR(INT1_vect) {
         // here we disable it quickly
         // this also be repeated in bridge_stop
         disable_sync();
-        display_state;
         bridge_stop();
         state.step_done = 1;
     }
@@ -214,6 +242,7 @@ struct Step dance[16] = {
     { turn_left_cmd, distance_turn_default*2 }
 };
 
+
 void do_dance() {
     uint8_t i;
     for (i=0; i<16; i++) {
@@ -228,6 +257,7 @@ void do_dance() {
     }
 }
 
+
 void usart_report_state() {
     uint8_t i = 0;
     uint8_t *p = (uint8_t*)(&state);
@@ -236,6 +266,7 @@ void usart_report_state() {
         UDR = p[i];
     }
 }
+
 
 void timer1_init(void) {
     // WGM 11 12 13 = Fast PWM top=ICR1 Upadate OCR1* at BOTTOM
@@ -250,6 +281,7 @@ void timer1_init(void) {
     OCR1B = 0x00;
 }
 
+
 // ---------------------------------------------------------
 #if use_lcd
 
@@ -258,12 +290,13 @@ char lcd_lo_buffer[18];
 char greet[6] = {cyr_p, cyr_r, cyr_i, cyr_v, cyr_e, cyr_t};
 
 void _display_state() {
+    cli();
     sprintf (lcd_up_buffer, "c:%02x o:%04x %c%c%c ",
                             state.cmds_cnt,
                             timer0_ovf,
                             state.running ? 'R' : ' ',
                             state.step_done ? 'D' : ' ',
-                            state.sync ? 'S' : ' '
+                            parameters[id_sync] ? 'S' : ' '
                             );
     lcd_command(lcd_goto_upper_line);
     for (unsigned char i=0;i<16;i++) {
@@ -278,36 +311,126 @@ void _display_state() {
     for (unsigned char i=0;i<16;i++) {
         lcd_data(lcd_lo_buffer[i]);
     }
+    sei();
 }
 
 #endif
 
+
 // speed sync timer
 ISR(TIMER0_OVF_vect) {
     timer0_ovf++;
-    if ((!state.running) || (!state.sync)) {
+    if ((!state.running) || (!parameters[id_sync])) {
         return;
     }
     int16_t dif = state.ticks_r - state.ticks_l;
-    if (dif > speed_disbalance) {
-        if (state.speed_l < speed_upper) {
-            state.speed_l += speed_step;
+    int16_t speed_correction = dif * parameters[id_tick_to_pwm];
+    if (dif > parameters[id_pwm_disbalance]) {
+        if (state.speed_l < parameters[id_pwm_max]) {
+            state.speed_l += (uint8_t)speed_correction;
         }
-        if (state.speed_r > speed_lower) {
-            state.speed_r -= speed_step;
+        if (state.speed_r > parameters[id_pwm_min]) {
+            state.speed_r -= (uint8_t)speed_correction;
         }
-    } else if (dif < -speed_disbalance) {
-        if (state.speed_l > speed_lower) {
-            state.speed_l -= speed_step;
+    } else if (dif < -parameters[id_pwm_disbalance]) {
+        speed_correction = -speed_correction;
+        if (state.speed_l > parameters[id_pwm_min]) {
+            state.speed_l -= (uint8_t)speed_correction;
         } 
-        if (state.speed_r < speed_upper) {
-            state.speed_r += speed_step;
+        if (state.speed_r < parameters[id_pwm_max]) {
+            state.speed_r += (uint8_t)speed_correction;
         }
     } else {
         return;
     }
     bridge_set_speed(state.speed_l, state.speed_r);
 }
+
+
+void parameters_init() {
+    parameters[id_pwm] = speed_default;
+    parameters[id_sync] = 1;
+    parameters[id_pwm_max] = speed_upper_default;
+    parameters[id_pwm_min] = speed_lower_default;
+    parameters[id_pwm_disbalance] = speed_disbalance_default;
+    parameters[id_tick_to_pwm] = 1;
+    parameters[id_step_fwd] = distance_fwd_default;
+    parameters[id_step_bkw] = distance_bkw_default;
+    parameters[id_step_turn] = distance_turn_default;
+}
+
+
+#if use_service_mode
+
+void display_parameter() {
+    cli();
+    lcd_command(lcd_goto_upper_line);
+    for (unsigned char i=0;i<16;i++) {
+        lcd_data(parameter_names[parameter_current][i]);
+    }
+    sprintf (lcd_lo_buffer, " = 0x%02x         ", parameter_value);
+    lcd_command(lcd_goto_lower_line);
+    for (unsigned char i=0;i<16;i++) {
+        lcd_data(lcd_lo_buffer[i]);
+    }
+    sei();
+}
+
+void load_parameter() {
+    parameter_value = parameters[parameter_current];
+}
+
+void parameter_list_up() {
+    if (parameter_current < parameter_max) {
+        parameter_current++;
+    } else {
+        parameter_current = 0;
+    }
+}
+
+void parameter_plus() {
+    if (parameter_value < 0xff) {
+        parameter_value++;
+    }
+}
+
+void parameter_minus() {
+    if (parameter_value > 0) {
+        parameter_value--;
+    }
+}
+
+void parameter_save() {
+}
+
+uint8_t process_service_command(uint8_t cmd) {
+    switch (cmd) {
+        case cmd_service_leave:
+            service_mode = 0;
+            lcd_command(lcd_display_clear);
+            return 0;
+            break;
+        case cmd_service_list_up:
+        case cmd_service_list_down:
+            parameter_list_up();
+            load_parameter();
+            break;
+        case cmd_service_value_up:
+            parameter_plus();
+            break;
+        case cmd_service_value_down:
+            parameter_minus();
+            break;
+        case cmd_service_write:
+            parameters[parameter_current] = parameter_value;
+            break;
+        default:
+            load_parameter();
+    }
+    display_parameter();
+    return 1;
+}
+#endif
 
 int main(void) {
 
@@ -344,6 +467,11 @@ startover:
 
     // ---- configure timers for PWM ---------------------
     timer1_init();
+
+#if use_service_mode
+    service_mode = 0;
+#endif
+    parameters_init();
     
     // initial state of h-bridge: stop at full speed
     port_bridge = 0;
@@ -355,10 +483,6 @@ startover:
     state.direction = break_all_cmd;
     state.command = 0;
     state.running = 0;
-    state.sync = 0;
-    state.step_bkw = distance_bkw_default;
-    state.step_fwd = distance_fwd_default;
-    state.step_turn = distance_turn_default;
 
     prescale_for_t0 = t0_prescale_1024;
     timer0_ovf = 0;
@@ -379,87 +503,58 @@ startover:
             // stop even if it is not movement command
             encoder_stop_all;
 
+            // TODO: reset pwm after each command ???
+            //state.speed_l = parameters[id_pwm];
+            //state.speed_r = parameters[id_pwm];
+
+#if use_service_mode
+            if (service_mode) {
+                if (process_service_command(command))
+                    continue;
+                else
+                    // TODO:
+                    continue;
+            }
+#endif
+
             switch(command) {
-                case cmd_display:
+#if use_service_mode
+                case cmd_service_enter:
+                    service_mode = 1;
+                    if (process_service_command(command))
+                        continue;
                     break;
+                case cmd_service_leave:
+                    service_mode = 0;
+                    break;
+#endif
                 case cmd_stop:
                 case cmd_test_stop:
                     bridge_stop();
                     break;
                 case cmd_fwd:
-                    bridge_set(move_fwd_cmd, state.speed_l, state.speed_r, 0);
+                    bridge_set(move_fwd_cmd, state.speed_l, state.speed_r, parameters[id_step_fwd]);
                     break;
                 case cmd_bkw:
-                    bridge_set(move_bkw_cmd, state.speed_l, state.speed_r, 0);
+                    bridge_set(move_bkw_cmd, state.speed_l, state.speed_r, parameters[id_step_bkw]);
                     break;
                 case cmd_left:
-                    bridge_set(turn_left_cmd, state.speed_l, state.speed_r, 0);
+                    bridge_set(turn_left_cmd, state.speed_l, state.speed_r, parameters[id_step_turn]);
                     break;
                 case cmd_right:
-                    bridge_set(turn_right_cmd, state.speed_l, state.speed_r, 0);
+                    bridge_set(turn_right_cmd, state.speed_l, state.speed_r, parameters[id_step_turn]);
                     break;
                 case cmd_test_fwd:
-                    bridge_set(move_fwd_cmd, state.speed_l, state.speed_r, state.step_fwd);
+                    bridge_set(move_fwd_cmd, state.speed_l, state.speed_r, 0);
                     break;
                 case cmd_test_bkw:
-                    bridge_set(move_bkw_cmd, state.speed_l, state.speed_r, state.step_bkw);
+                    bridge_set(move_bkw_cmd, state.speed_l, state.speed_r, 0);
                     break;
                 case cmd_test_left:
-                    bridge_set(turn_left_cmd, state.speed_l, state.speed_r, state.step_turn);
+                    bridge_set(turn_left_cmd, state.speed_l, state.speed_r, 0);
                     break;
                 case cmd_test_right:
-                    bridge_set(turn_right_cmd, state.speed_l, state.speed_r, state.step_turn);
-                    break;
-                case cmd_speed_up:
-                    if (state.speed_l < 0xff) {
-                        state.speed_l++;
-                    }
-                    if (state.speed_r < 0xff) {
-                        state.speed_r++;
-                    }
-                    break;
-                case cmd_speed_down:
-                    if (state.speed_l > 0) {
-                        state.speed_l--;
-                    }
-                    if (state.speed_r > 0) {
-                        state.speed_r--;
-                    }
-                    break;
-                case cmd_speedup_left:
-                    if (state.speed_l < 0xff) {
-                        state.speed_l++;
-                    }
-                    if (state.speed_r > 0x00) {
-                        state.speed_r--;
-                    }
-                    break;
-                case cmd_speedup_right:
-                    if (state.speed_r < 0xff) {
-                        state.speed_r++;
-                    }
-                    if (state.speed_l > 0x00) {
-                        state.speed_l--;
-                    }
-                    break;
-                case cmd_trip_plus:
-                    if (state.step_fwd<(uint16_t)0xffff)
-                        state.step_fwd++;
-                    if (state.step_bkw<(uint16_t)0xffff)
-                        state.step_bkw++;
-                    if (state.step_turn<(uint16_t)0xffff)
-                        state.step_turn++;
-                    break;
-                case cmd_trip_minus:
-                    if (state.step_fwd>0)
-                        state.step_fwd--;
-                    if (state.step_bkw>0)
-                        state.step_bkw--;
-                    if (state.step_turn>0)
-                        state.step_turn--;
-                    break;
-                case cmd_sync:
-                    switch_speed_sync();
+                    bridge_set(turn_right_cmd, state.speed_l, state.speed_r, 0);
                     break;
                 case cmd_prescale_1:
                     prescale_for_t0 = t0_prescale_1;
@@ -487,13 +582,15 @@ startover:
             TCCR0 = prescale_for_t0;
             // TODO: use_usb
             //usart_report_state();
-
-            display_state;
+            pause_after_command();
             
-            } // if new command
-        
-        pause_after_command();
-        
+        } // if new command
+
+        if (state.step_done) {
+            state.step_done = 0;
+            display_state;
+        }
+
     } // while
     return 0;
 }

@@ -29,17 +29,18 @@
 #include <stdint.h>
 #include <util/delay.h>
 
-#ifdef use_usb
+#include "ir-nec.h"
+#include "60T.h"
+
+#if use_usb
     #include "usbdrv.h"
     #include "oddebug.h"
 #endif
 
-#include "ir-nec.h"
-#include "60T.h"
 
 // ---- connections -----
 // inputs:
-#ifdef use_usb
+#if use_usb
     #define usbint PD2
 #else
     #define sensor PD2
@@ -58,7 +59,7 @@ static uint8_t replyBuf[ReportSize];
 
 /************************************************************/
 // vUSB
-#ifdef use_usb
+#if use_usb
 
 // from host ---> to uC
 USB_PUBLIC uchar usbFunctionWrite(uchar *data, uchar len) {
@@ -96,7 +97,7 @@ ISR (USART_RXC_vect) {
     replyBuf[rx_index++] = UDR;
 }
 
-#ifndef use_usb
+#if !use_usb
 ISR(INT0_vect) {
     usart_transmit(cmd_stop);
 }
@@ -108,7 +109,7 @@ int main(void) {
 
     rx_index = 0;
     
-#ifdef use_usb
+#if use_usb
     PORTD = 0;
     DDRD = ~(_BV(PD2));
     PORTB = 0;
@@ -128,7 +129,7 @@ int main(void) {
     UCSRB = _BV(TXEN) | _BV(RXEN) | _BV(RXCIE);
     UCSRC = usart_mode;
 
-#ifdef use_usb
+#if use_usb
     usbInit();
 #endif
 
@@ -138,14 +139,18 @@ int main(void) {
 
     while (1) {
 
-#ifdef use_usb
+#if use_usb
         usbPoll();
 #endif
         cli();
         uint8_t check_result = check_new_packet(&received_packet);
         sei();
         if (check_result) {
-            // TODO: if repeat & set motion ?
+#if skip_repeat
+            if (received_packet.repeat) {
+                continue;
+            }
+#endif
             usart_transmit(received_packet.command);
         }
     }

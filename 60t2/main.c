@@ -18,8 +18,10 @@
                  (ICP1) PB0 -|14     15|- PB1 (OC1A)    ----> pwm R
                              +---------+
 
-     Timer 0 - CTC mode for periodical checks of motor speed
-     Timer 1 - PWM mode to OC1A,B
+     Timer 0 - L motor speed control CTC mode
+     Timer 1 - 8-bit PWM mode to OC1A,B
+     Timer 2 - R motor speed control CTC mode
+
 */
 //------------------------------------------------------------------------------
 
@@ -65,30 +67,29 @@
 //------------------------------------------------------------------------------
 
 #define id_pwm 0
-#define id_mode 1
-#define id_pwm_max 2
-#define id_pwm_min 3
-#define id_pwm_disbalance 4
-#define id_tick_to_pwm 5
+#define id_pwm_max 1
+#define id_pwm_min 2
+#define id_dticks 3
+#define id_divident 4
+#define id_divider 5
 #define id_step_fwd 6
 #define id_step_bkw 7
 #define id_step_turn 8
 #define parameter_max 8
 #define parameter_count (parameter_max+1) 
 // TODO: prescale , pause for jitter, pause after command
-uint8_t parameter_current;
-uint8_t parameter_value;
 uint8_t parameters[parameter_count];
 
 #if use_service_mode
-    uint8_t service_mode;
+    uint8_t parameter_current;
+    uint8_t parameter_value;
     char * parameter_names[parameter_count] = {
         "1: Target PWM   ",
-        "2: PWM L-R sync ",
-        "3: PWM Maximum  ",
-        "4: PWM Minimum  ",
-        "5: PWM Diff     ",
-        "6: Enc To PWM   ",
+        "2: PWM Maximum  ",
+        "3: PWM Minimum  ",
+        "4: Ticks Per Ovf",
+        "5: Coef Divident",
+        "6: Coef Divider ",
         "7: Step Forward ",
         "8: Step Backward",
         "9: Step Turn    ",
@@ -158,15 +159,19 @@ void pause_after_step() {
 #define disable_ticks GICR = 0
 
 void disable_speed_control() {
-    TIMSK &= ~(_BV(TOIE0));
+    TIMSK &= ~(_BV(TOIE0)|_BV(TOIE2));
     TCCR0 = 0;
+    TCCR2 = 0;
     TCNT0 = 0;
+    TCNT2 = 0;
 }
 
 void enable_speed_control() {
-    TIMSK |= _BV(TOIE0);
+    TIMSK |= (_BV(TOIE0)|_BV(TOIE2));
     TCCR0 = T0_PRESCALE_1024;
+    TCCR2 = T2_PRESCALE_1024;
     TCNT0 = 0;
+    TCNT2 = 0;
 }
 
 //------- BRIDGE CONTROL -------------------------------------------------------
@@ -235,9 +240,10 @@ void usart_report_state() {
 #if use_lcd
 void _display_state() {
     cli();
-    sprintf (lcd_up_buffer, "c:%02x o:%04x        ",
+    sprintf (lcd_up_buffer, "c:%02x  %04x:%04x ",
                             state.cmds_cnt,
-                            state.speed_control_called);
+                            state.timer_called_l,
+                            state.timer_called_r);
     lcd_command(lcd_goto_upper_line);
     for (unsigned char i=0;i<16;i++) {
         lcd_data(lcd_up_buffer[i]);
@@ -333,11 +339,12 @@ uint8_t process_service_command(uint8_t cmd) {
 
 void parameters_init() {
     parameters[id_pwm] = SPEED_DEFAULT;
-    parameters[id_mode] = MODE_SYNC;
+    parameters[id_divident] = DIVIDENT_DEFAULT;
+    parameters[id_divider] = DIVIDER_DEFAULT;
     parameters[id_pwm_max] = SPEED_UPPER_DEFAULT;
     parameters[id_pwm_min] = SPEED_LOWER_DEFAULT;
-    parameters[id_pwm_disbalance] = SPEED_DISBALANCE_DEFAULT;
-    parameters[id_tick_to_pwm] = 1;
+    // this is the count of 'ticks' from encoder between two cons. ovf 
+    parameters[id_dticks] = TICKS_PER_OVF;
     parameters[id_step_fwd] = DISTANCE_FWD_DEFAULT;
     parameters[id_step_bkw] = DISTANCE_BKW_DEFAULT;
     parameters[id_step_turn] = DISTANCE_TURN_DEFAULT;
@@ -367,6 +374,7 @@ ISR(INT0_vect) {
     if (state.ticks_l++ >= state.distance) {
         stop();
     }
+    state.dticks_l++;
 }
 
 
@@ -376,38 +384,50 @@ ISR(INT1_vect) {
     if (state.ticks_r++ >= state.distance) {
         stop();
     }
+    state.dticks_r++;
 }
 
 
-// speed sync timer
+// speed sync L timer
 ISR(TIMER0_OVF_vect) {
-    state.speed_control_called++;
+    state.timer_called_l++;
     // TODO: stuck check
     if ((!state.running) || (state.step_done)) {
         return;
     }
-    // speed up in first half, slow down in last
-    uint8_t first_half = (((state.distance<<1) > state.ticks_r) ? 1 : 0);
-    int16_t dif = state.ticks_r - state.ticks_l;
-    int16_t speed_correction = dif * parameters[id_tick_to_pwm];
-    if (dif > parameters[id_pwm_disbalance]) { // R is faster
-        if (PWM_L < parameters[id_pwm_max] && first_half) {
-             PWM_L += (uint8_t)speed_correction;
-        }
-        if (PWM_R > parameters[id_pwm_min] && (!first_half)) {
-            PWM_R -= (uint8_t)speed_correction;
-        }
-    } else if (dif < -parameters[id_pwm_disbalance]) { // L is faster
-        speed_correction = -speed_correction;
-        if (PWM_L > parameters[id_pwm_min] && (!first_half)) {
-            PWM_L -= (uint8_t)speed_correction;
-        } 
-        if (PWM_R < parameters[id_pwm_max] && first_half) {
-            PWM_R += (uint8_t)speed_correction;
-        }
-    } else {
+    int16_t d = parameters[id_dticks] - state.dticks_l;
+    int16_t s = PWM_L; 
+    // signed difference between desired and actual speed
+    // multiplied by coefficient pwm/ticks
+    d = d*parameters[id_divident]/parameters[id_divider];
+    s = (uint8_t)(s + d);
+    // correct speed if it is inside limits
+    if ((parameters[id_pwm_max] > (uint8_t)s) && \
+            (parameters[id_pwm_min] < (uint8_t)s)) {
+        PWM_L = (uint8_t)s;
+    }
+    state.dticks_l = 0;
+}
+
+
+// speed sync R timer
+ISR(TIMER2_OVF_vect) {
+    state.timer_called_r++;
+    if ((!state.running) || (state.step_done)) {
         return;
     }
+    int16_t d = parameters[id_dticks] - state.dticks_r;
+    int16_t s = PWM_R; 
+    // signed difference between desired and actual speed
+    // multiplied by coefficient pwm/ticks
+    d = d*parameters[id_divident]/parameters[id_divider];
+    s = (uint8_t)(s + d);
+    // correct speed if it is inside limits
+    if ((parameters[id_pwm_max] > (uint8_t)s) && \
+            (parameters[id_pwm_min] < (uint8_t)s)) {
+        PWM_R = (uint8_t)s;
+    }
+    state.dticks_r = 0;
 }
 
 
@@ -454,9 +474,6 @@ startover:
     // ---- configure timers for PWM ---------------------
     timer1_init();
 
-#if use_service_mode
-    state.service_mode = 0;
-#endif
     parameters_init();
     
     // initial state of h-bridge: stop at full speed
@@ -466,7 +483,16 @@ startover:
     state.step_done = 0;
     state.command = 0;
     state.running = 0;
-    state.speed_control_called = 0;
+    state.distance = 0;
+    state.ticks_l = 0;
+    state.ticks_r = 0;
+#if use_service_mode
+    state.service_mode = 0;
+#endif
+    state.timer_called_l = 0;
+    state.timer_called_r = 0;
+    state.dticks_l = 0;
+    state.dticks_r = 0;
 
     sei();
 
@@ -482,7 +508,7 @@ startover:
             state.step_done = 0;
 
 #if use_service_mode
-            if (service_mode) {
+            if (state.service_mode) {
                 if (process_service_command(command))
                     continue;
                 else

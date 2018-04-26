@@ -58,6 +58,8 @@ endif
 
 ifeq ($(use_lcd),1)
 	mainobjects += ../lcd/lcd.o
+else
+	inc60t += -Duse_service_mode=0
 endif
 
 all: $(TARGETS)

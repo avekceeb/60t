@@ -2,9 +2,16 @@
 
 // --- configurables ----
 #define skip_repeat 1
-//#define use_usb 0
-//#define use_lcd 0
-#define use_service_mode 1
+#ifndef use_usb
+    #define use_usb 0
+#endif
+#ifndef use_lcd
+    #define use_lcd 0
+#endif
+#ifndef use_service_mode
+    #define use_service_mode 1
+    #define use_lcd 1
+#endif
 
 // ---- usart settings ------
 #define baudrate 9600
@@ -37,13 +44,17 @@
 #define SPEED_UPPER_DEFAULT      0xe0
 #define SPEED_LOWER_DEFAULT      0xc0
 #define SPEED_DEFAULT            0xc3
+#define TICKS_PER_OVF            5
+
+#define DIVIDENT_DEFAULT 4
+#define DIVIDER_DEFAULT  3
 
 #define T0_PRESCALE_1    (_BV(CS00))
 #define T0_PRESCALE_8    (_BV(CS01))
 #define T0_PRESCALE_64   (_BV(CS01)|_BV(CS00))
 #define T0_PRESCALE_256  (_BV(CS02))
 #define T0_PRESCALE_1024 (_BV(CS02)|_BV(CS00))
-
+#define T2_PRESCALE_1024 (_BV(CS22)|_BV(CS21)|_BV(CS20))
 
 // ----- command codes -------------
 // IR-remote control for Yamaha CDX4
@@ -68,15 +79,8 @@
 #define CMD_LEFT  button_begin
 #define CMD_RIGHT button_end
 
-#define CMD_TEST_STOP  button_5
-#define CMD_TEST_FWD   button_2
-#define CMD_TEST_BKW   button_8
-#define CMD_TEST_LEFT  button_4
-#define CMD_TEST_RIGHT button_6
-
 #define CMD_RESTART button_space
 #define CMD_PROGRAM button_prog
-
 
 #define DISTANCE_WEEL_ROUND   ((uint8_t)20)
 #define DISTANCE_FWD_DEFAULT  (uint8_t)(DISTANCE_WEEL_ROUND*3)
@@ -112,11 +116,10 @@ struct Report {
     uint8_t service_mode;
 #endif
     uint8_t cmds_cnt;
-    uint16_t speed_control_called;
+    uint16_t timer_called_l;
+    uint16_t timer_called_r;
+    uint8_t dticks_l;
+    uint8_t dticks_r;
 };
 #define ReportSize (sizeof(struct Report))
-
-#define MODE_NONE 0
-#define MODE_SYNC 1
-#define MODE_BOTH 2
 

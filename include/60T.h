@@ -33,10 +33,10 @@
 
 
 // ----- sync speed settings ------
-#define SPEED_DEFAULT            0xc0
 #define SPEED_DISBALANCE_DEFAULT 3
-#define SPEED_UPPER_DEFAULT      (0xe0)
-#define SPEED_LOWER_DEFAULT      (0xc0)
+#define SPEED_UPPER_DEFAULT      0xe0
+#define SPEED_LOWER_DEFAULT      0xc0
+#define SPEED_DEFAULT            0xc3
 
 #define T0_PRESCALE_1    (_BV(CS00))
 #define T0_PRESCALE_8    (_BV(CS01))
@@ -54,11 +54,11 @@
 #define CMD_SPEED_DOWN     button_level_minus
 #define CMD_SPEEDUP_RIGHT  button_random 
 #define CMD_SPEEDUP_LEFT   button_repeat
-#define CMD_PRESCALE_1     button_1
-#define CMD_PRESCALE_8     button_3
-#define CMD_PRESCALE_64    button_7
-#define CMD_PRESCALE_256   button_9
-#define CMD_PRESCALE_1024  button_0
+//#define CMD_PRESCALE_1     button_1
+//#define CMD_PRESCALE_8     button_3
+//#define CMD_PRESCALE_64    button_7
+//#define CMD_PRESCALE_256   button_9
+//#define CMD_PRESCALE_1024  button_0
 
 
 // movement commands:
@@ -101,21 +101,22 @@ struct Step {
 
 
 struct Report {
+    uint8_t command;
+    uint16_t distance;
     uint16_t ticks_l;
     uint16_t ticks_r;
-    uint8_t speed_l;
-    uint8_t speed_r;
-    uint8_t direction;
-    uint8_t command;
-    // TODO: bit fields
     uint8_t running;
     uint8_t step_done;
-    //uint16_t step_bkw;
-    //uint16_t step_fwd;
-    //uint16_t step_turn;
+    // only for debug
+#if use_service_mode
+    uint8_t service_mode;
+#endif
     uint8_t cmds_cnt;
+    uint16_t speed_control_called;
 };
-
 #define ReportSize (sizeof(struct Report))
- 
-    
+
+#define MODE_NONE 0
+#define MODE_SYNC 1
+#define MODE_BOTH 2
+

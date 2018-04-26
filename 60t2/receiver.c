@@ -99,7 +99,7 @@ ISR (USART_RXC_vect) {
 
 #if !use_usb
 ISR(INT0_vect) {
-    usart_transmit(cmd_stop);
+    usart_transmit(CMD_STOP);
 }
 #endif
 

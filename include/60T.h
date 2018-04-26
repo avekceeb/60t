@@ -23,91 +23,75 @@
 
 
 // ---- h-bridge port --------
-#define move_fwd_cmd   0b00001010
-#define move_bkw_cmd   0b00000101
-#define turn_left_cmd  0b00000110
-#define turn_right_cmd 0b00001001
-#define break_all_cmd  0b00000000
-
-#define break_left_mask 0b11111100
-#define break_right_mask 0b11110011
+#define MOVE_FWD_CMD     0b00001010
+#define MOVE_BKW_CMD     0b00000101
+#define TURN_LEFT_CMD    0b00000110
+#define TURN_RIGHT_CMD   0b00001001
+#define BREAK_ALL_CMD    0b00000000
+//#define BREAK_LEFT_MASK  0b11111100
+//#define BREAK_RIGHT_MASK 0b11110011
 
 
 // ----- sync speed settings ------
-//#define speed_diff_threshold 5
-//#define speed_sync_step 3
-#define speed_default 0xc0
-#define speed_min 0xb0
-#define speed_max 0xff
-#define speed_step 1
-#define speed_disbalance_default 3
-//#define speed_upper (speed_max - speed_step)
-//#define speed_lower (speed_min + speed_step)
-#define speed_upper_default (0xe0)
-#define speed_lower_default (0xc0)
+#define SPEED_DEFAULT            0xc0
+#define SPEED_DISBALANCE_DEFAULT 3
+#define SPEED_UPPER_DEFAULT      (0xe0)
+#define SPEED_LOWER_DEFAULT      (0xc0)
 
-#define t0_prescale_1 (_BV(CS00))
-#define t0_prescale_8 (_BV(CS01))
-#define t0_prescale_64 (_BV(CS01)|_BV(CS00))
-#define t0_prescale_256 (_BV(CS02))
-#define t0_prescale_1024 (_BV(CS02)|_BV(CS00))
+#define T0_PRESCALE_1    (_BV(CS00))
+#define T0_PRESCALE_8    (_BV(CS01))
+#define T0_PRESCALE_64   (_BV(CS01)|_BV(CS00))
+#define T0_PRESCALE_256  (_BV(CS02))
+#define T0_PRESCALE_1024 (_BV(CS02)|_BV(CS00))
 
 
 // ----- command codes -------------
 // IR-remote control for Yamaha CDX4
 #include "yamaha-cdx4.h"
 
-#define cmd_invalid 0x00
-
-
-#define cmd_speed_up button_level_plus
-#define cmd_speed_down button_level_minus
-
-#define cmd_speedup_right button_random 
-#define cmd_speedup_left  button_repeat
-
-#define cmd_prescale_1  button_1
-#define cmd_prescale_8  button_3
-#define cmd_prescale_64  button_7
-#define cmd_prescale_256  button_9
-#define cmd_prescale_1024  button_0
+#define CMD_INVALID        0x00
+#define CMD_SPEED_UP       button_level_plus
+#define CMD_SPEED_DOWN     button_level_minus
+#define CMD_SPEEDUP_RIGHT  button_random 
+#define CMD_SPEEDUP_LEFT   button_repeat
+#define CMD_PRESCALE_1     button_1
+#define CMD_PRESCALE_8     button_3
+#define CMD_PRESCALE_64    button_7
+#define CMD_PRESCALE_256   button_9
+#define CMD_PRESCALE_1024  button_0
 
 
 // movement commands:
-#define cmd_stop button_play
-#define cmd_fwd button_pause
-#define cmd_bkw button_stop
-#define cmd_left button_begin
-#define cmd_right button_end
+#define CMD_STOP  button_play
+#define CMD_FWD   button_pause
+#define CMD_BKW   button_stop
+#define CMD_LEFT  button_begin
+#define CMD_RIGHT button_end
 
-#define cmd_test_stop button_5
-#define cmd_test_fwd button_2
-#define cmd_test_bkw button_8
-#define cmd_test_left button_4
-#define cmd_test_right button_6
+#define CMD_TEST_STOP  button_5
+#define CMD_TEST_FWD   button_2
+#define CMD_TEST_BKW   button_8
+#define CMD_TEST_LEFT  button_4
+#define CMD_TEST_RIGHT button_6
 
-#define cmd_trip_plus button_fast_forward
-#define cmd_trip_minus button_fast_backward
+#define CMD_RESTART button_space
+#define CMD_PROGRAM button_prog
 
-#define cmd_restart button_space
-#define cmd_program button_prog
 
-#define cmd_display button_index
-
-#define distance_weel_round ((uint8_t)20)
-#define distance_fwd_default (uint8_t)(distance_weel_round*3)
-#define distance_bkw_default (uint8_t)(distance_weel_round*2)
-#define distance_turn_default (distance_weel_round)
+#define DISTANCE_WEEL_ROUND   ((uint8_t)20)
+#define DISTANCE_FWD_DEFAULT  (uint8_t)(DISTANCE_WEEL_ROUND*3)
+#define DISTANCE_BKW_DEFAULT  (uint8_t)(DISTANCE_WEEL_ROUND*2)
+#define DISTANCE_TURN_DEFAULT (DISTANCE_WEEL_ROUND)
 
 
 // service mode:
-#define cmd_service_enter      button_sync
-#define cmd_service_leave      button_open
-#define cmd_service_list_up    button_pause
-#define cmd_service_list_down  button_stop
-#define cmd_service_value_up   button_level_plus
-#define cmd_service_value_down button_level_minus
-#define cmd_service_write      button_prog
+#define CMD_SERVICE_ENTER      button_sync
+#define CMD_SERVICE_LEAVE      button_open
+#define CMD_SERVICE_LIST_UP    button_pause
+#define CMD_SERVICE_LIST_DOWN  button_stop
+#define CMD_SERVICE_VALUE_UP   button_level_plus
+#define CMD_SERVICE_VALUE_DOWN button_level_minus
+#define CMD_SERVICE_WRITE      button_prog
 
 
 struct Step {

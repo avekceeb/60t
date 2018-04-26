@@ -157,7 +157,7 @@ void enable_sync() {
 
 void bridge_stop() {
     state.running = 0;
-    state.direction = break_all_cmd;
+    state.direction = BREAK_ALL_CMD;
     bridge_set_speed(0, 0);
     bridge_set_direction(state.direction);
     disable_sync();
@@ -217,29 +217,29 @@ ISR(USART_RXC_vect) {
 
 struct Step dance[16] = {
     // 1
-    { move_fwd_cmd, distance_fwd_default },
-    { turn_left_cmd, distance_turn_default*2 },
+    { MOVE_FWD_CMD, DISTANCE_FWD_DEFAULT },
+    { TURN_LEFT_CMD, DISTANCE_TURN_DEFAULT*2 },
     // 2
-    { move_fwd_cmd, distance_fwd_default },
-    { turn_left_cmd, distance_turn_default*2 },
+    { MOVE_FWD_CMD, DISTANCE_FWD_DEFAULT },
+    { TURN_LEFT_CMD, DISTANCE_TURN_DEFAULT*2 },
     // 3
-    { move_fwd_cmd, distance_fwd_default },
-    { turn_right_cmd, distance_turn_default*2},
+    { MOVE_FWD_CMD, DISTANCE_FWD_DEFAULT },
+    { TURN_RIGHT_CMD, DISTANCE_TURN_DEFAULT*2},
     // 4
-    { move_fwd_cmd, distance_fwd_default },
-    { turn_right_cmd, distance_turn_default*2 },
+    { MOVE_FWD_CMD, DISTANCE_FWD_DEFAULT },
+    { TURN_RIGHT_CMD, DISTANCE_TURN_DEFAULT*2 },
     // 5
-    { move_fwd_cmd, distance_fwd_default },
-    { turn_right_cmd, distance_turn_default*2 },
+    { MOVE_FWD_CMD, DISTANCE_FWD_DEFAULT },
+    { TURN_RIGHT_CMD, DISTANCE_TURN_DEFAULT*2 },
     // 6
-    { move_fwd_cmd, distance_fwd_default },
-    { turn_right_cmd, distance_turn_default*2 },
+    { MOVE_FWD_CMD, DISTANCE_FWD_DEFAULT },
+    { TURN_RIGHT_CMD, DISTANCE_TURN_DEFAULT*2 },
     // 7
-    { move_fwd_cmd, distance_fwd_default },
-    { turn_left_cmd, distance_turn_default*2 },
+    { MOVE_FWD_CMD, DISTANCE_FWD_DEFAULT },
+    { TURN_LEFT_CMD, DISTANCE_TURN_DEFAULT*2 },
     // 8
-    { move_fwd_cmd, distance_fwd_default },
-    { turn_left_cmd, distance_turn_default*2 }
+    { MOVE_FWD_CMD, DISTANCE_FWD_DEFAULT },
+    { TURN_LEFT_CMD, DISTANCE_TURN_DEFAULT*2 }
 };
 
 
@@ -348,15 +348,15 @@ ISR(TIMER0_OVF_vect) {
 
 
 void parameters_init() {
-    parameters[id_pwm] = speed_default;
+    parameters[id_pwm] = SPEED_DEFAULT;
     parameters[id_sync] = 1;
-    parameters[id_pwm_max] = speed_upper_default;
-    parameters[id_pwm_min] = speed_lower_default;
-    parameters[id_pwm_disbalance] = speed_disbalance_default;
+    parameters[id_pwm_max] = SPEED_UPPER_DEFAULT;
+    parameters[id_pwm_min] = SPEED_LOWER_DEFAULT;
+    parameters[id_pwm_disbalance] = SPEED_DISBALANCE_DEFAULT;
     parameters[id_tick_to_pwm] = 1;
-    parameters[id_step_fwd] = distance_fwd_default;
-    parameters[id_step_bkw] = distance_bkw_default;
-    parameters[id_step_turn] = distance_turn_default;
+    parameters[id_step_fwd] = DISTANCE_FWD_DEFAULT;
+    parameters[id_step_bkw] = DISTANCE_BKW_DEFAULT;
+    parameters[id_step_turn] = DISTANCE_TURN_DEFAULT;
 }
 
 
@@ -405,23 +405,23 @@ void parameter_save() {
 
 uint8_t process_service_command(uint8_t cmd) {
     switch (cmd) {
-        case cmd_service_leave:
+        case CMD_SERVICE_LEAVE:
             service_mode = 0;
             lcd_command(lcd_display_clear);
             return 0;
             break;
-        case cmd_service_list_up:
-        case cmd_service_list_down:
+        case CMD_SERVICE_LIST_UP:
+        case CMD_SERVICE_LIST_DOWN:
             parameter_list_up();
             load_parameter();
             break;
-        case cmd_service_value_up:
+        case CMD_SERVICE_VALUE_UP:
             parameter_plus();
             break;
-        case cmd_service_value_down:
+        case CMD_SERVICE_VALUE_DOWN:
             parameter_minus();
             break;
-        case cmd_service_write:
+        case CMD_SERVICE_WRITE:
             parameters[parameter_current] = parameter_value;
             break;
         default:
@@ -478,13 +478,13 @@ startover:
     
     state.cmds_cnt = 0;
     state.step_done = 0;
-    state.speed_l = speed_default;
-    state.speed_r = speed_default;
-    state.direction = break_all_cmd;
+    state.speed_l = SPEED_DEFAULT;
+    state.speed_r = SPEED_DEFAULT;
+    state.direction = BREAK_ALL_CMD;
     state.command = 0;
     state.running = 0;
 
-    prescale_for_t0 = t0_prescale_1024;
+    prescale_for_t0 = T0_PRESCALE_1024;
     timer0_ovf = 0;
 
     sei();
@@ -519,62 +519,62 @@ startover:
 
             switch(command) {
 #if use_service_mode
-                case cmd_service_enter:
+                case CMD_SERVICE_ENTER:
                     service_mode = 1;
                     if (process_service_command(command))
                         continue;
                     break;
-                case cmd_service_leave:
+                case CMD_SERVICE_LEAVE:
                     service_mode = 0;
                     break;
 #endif
-                case cmd_stop:
-                case cmd_test_stop:
+                case CMD_STOP:
+                case CMD_TEST_STOP:
                     bridge_stop();
                     break;
-                case cmd_fwd:
-                    bridge_set(move_fwd_cmd, state.speed_l, state.speed_r, parameters[id_step_fwd]);
+                case CMD_FWD:
+                    bridge_set(MOVE_FWD_CMD, state.speed_l, state.speed_r, parameters[id_step_fwd]);
                     break;
-                case cmd_bkw:
-                    bridge_set(move_bkw_cmd, state.speed_l, state.speed_r, parameters[id_step_bkw]);
+                case CMD_BKW:
+                    bridge_set(MOVE_BKW_CMD, state.speed_l, state.speed_r, parameters[id_step_bkw]);
                     break;
-                case cmd_left:
-                    bridge_set(turn_left_cmd, state.speed_l, state.speed_r, parameters[id_step_turn]);
+                case CMD_LEFT:
+                    bridge_set(TURN_LEFT_CMD, state.speed_l, state.speed_r, parameters[id_step_turn]);
                     break;
-                case cmd_right:
-                    bridge_set(turn_right_cmd, state.speed_l, state.speed_r, parameters[id_step_turn]);
+                case CMD_RIGHT:
+                    bridge_set(TURN_RIGHT_CMD, state.speed_l, state.speed_r, parameters[id_step_turn]);
                     break;
-                case cmd_test_fwd:
-                    bridge_set(move_fwd_cmd, state.speed_l, state.speed_r, 0);
+                case CMD_TEST_FWD:
+                    bridge_set(MOVE_FWD_CMD, state.speed_l, state.speed_r, 0);
                     break;
-                case cmd_test_bkw:
-                    bridge_set(move_bkw_cmd, state.speed_l, state.speed_r, 0);
+                case CMD_TEST_BKW:
+                    bridge_set(MOVE_BKW_CMD, state.speed_l, state.speed_r, 0);
                     break;
-                case cmd_test_left:
-                    bridge_set(turn_left_cmd, state.speed_l, state.speed_r, 0);
+                case CMD_TEST_LEFT:
+                    bridge_set(TURN_LEFT_CMD, state.speed_l, state.speed_r, 0);
                     break;
-                case cmd_test_right:
-                    bridge_set(turn_right_cmd, state.speed_l, state.speed_r, 0);
+                case CMD_TEST_RIGHT:
+                    bridge_set(TURN_RIGHT_CMD, state.speed_l, state.speed_r, 0);
                     break;
-                case cmd_prescale_1:
-                    prescale_for_t0 = t0_prescale_1;
+                case CMD_PRESCALE_1:
+                    prescale_for_t0 = T0_PRESCALE_1;
                     break;
-                case cmd_prescale_8:
-                    prescale_for_t0 = t0_prescale_8;
+                case CMD_PRESCALE_8:
+                    prescale_for_t0 = T0_PRESCALE_8;
                     break;
-                case cmd_prescale_64:
-                    prescale_for_t0 = t0_prescale_64;
+                case CMD_PRESCALE_64:
+                    prescale_for_t0 = T0_PRESCALE_64;
                     break;
-                case cmd_prescale_256:
-                    prescale_for_t0 = t0_prescale_256;
+                case CMD_PRESCALE_256:
+                    prescale_for_t0 = T0_PRESCALE_256;
                     break;
-                case cmd_prescale_1024:
-                    prescale_for_t0 = t0_prescale_1024;
+                case CMD_PRESCALE_1024:
+                    prescale_for_t0 = T0_PRESCALE_1024;
                     break;
-                case cmd_restart:
+                case CMD_RESTART:
                     goto startover;
                     break;
-                case cmd_program:
+                case CMD_PROGRAM:
                     do_dance();
                     break;
             } // switch

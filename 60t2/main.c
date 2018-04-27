@@ -192,6 +192,9 @@ void stop() {
 void move(uint8_t _direction, uint16_t _distance) {
     state.ticks_l = 0;
     state.ticks_r = 0;
+    // TODO:  these 2 are debug:
+    state.timer_called_l = 0;
+    state.timer_called_r = 0;
     state.distance = _distance;
     state.running = 1;
     state.step_done = 0;
@@ -240,19 +243,20 @@ void usart_report_state() {
 #if use_lcd
 void _display_state() {
     cli();
-    sprintf (lcd_up_buffer, "c:%02x  %04x:%04x ",
-                            state.cmds_cnt,
-                            state.timer_called_l,
-                            state.timer_called_r);
+    // TODO: supposing all values are 8bit long
+    sprintf (lcd_up_buffer, "cmd=%02x ovf=%02x:%02x",
+                            (uint8_t)state.cmds_cnt,
+                            (uint8_t)state.timer_called_l,
+                            (uint8_t)state.timer_called_r);
     lcd_command(lcd_goto_upper_line);
     for (unsigned char i=0;i<16;i++) {
         lcd_data(lcd_up_buffer[i]);
     }
-    sprintf (lcd_lo_buffer, "%02x:%02x  %04x:%04x",
-                            PWM_L,
-                            PWM_R,
-                            state.ticks_l,
-                            state.ticks_r);
+    sprintf (lcd_lo_buffer, "s=%02x:%02x  t=%02x:%02x",
+                            (uint8_t)PWM_L,
+                            (uint8_t)PWM_R,
+                            (uint8_t)state.ticks_l,
+                            (uint8_t)state.ticks_r);
     lcd_command(lcd_goto_lower_line);
     for (unsigned char i=0;i<16;i++) {
         lcd_data(lcd_lo_buffer[i]);

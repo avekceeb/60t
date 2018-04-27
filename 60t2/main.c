@@ -35,6 +35,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <util/delay.h>
+#include <avr/eeprom.h>
 #include "60T.h"
 #if use_lcd
     #include "lcd.h"
@@ -64,6 +65,8 @@
 
 #define BRIDGE PORTC
 
+#define MAGIC60T 0x60
+
 //------------------------------------------------------------------------------
 
 #define id_pwm 0
@@ -78,7 +81,30 @@
 #define parameter_max 8
 #define parameter_count (parameter_max+1) 
 // TODO: prescale , pause for jitter, pause after command
+
 uint8_t parameters[parameter_count];
+
+
+void eeprom_save_parameters() {
+    uint8_t i;
+    for (i=0;i<parameter_count;i++) {
+        eeprom_write_byte((uint8_t *)(uint16_t)i, parameters[i]);
+    }
+    eeprom_write_byte((uint8_t *)(uint16_t)parameter_count, MAGIC60T);
+}
+
+
+uint8_t eeprom_load_parameters() {
+    uint8_t i;
+    if (MAGIC60T != eeprom_read_byte((const uint8_t *)(uint16_t)parameter_count)) {
+        return 0;
+    }
+    for (i=0;i<parameter_count;i++) {
+        parameters[i] = eeprom_read_byte((const uint8_t *)(uint16_t)i);
+    }
+    return 1;
+}
+
 
 #if use_service_mode
     uint8_t parameter_current;
@@ -95,6 +121,7 @@ uint8_t parameters[parameter_count];
         "9: Step Turn    ",
     };
 #endif
+
 //------------------------------------------------------------------------------
 struct Report state;
 //------------------------------------------------------------------------------
@@ -102,6 +129,9 @@ struct Report state;
 char lcd_up_buffer[18];
 char lcd_lo_buffer[18];
 char greet[6] = {cyr_p, cyr_r, cyr_i, cyr_v, cyr_e, cyr_t};
+char * loaded = "eeprom loaded   ";
+char * not_loaded = "eeprom NOT found";
+char * saved = "eeprom saved    ";
 #endif
 
 struct Step dance[16] = {
@@ -323,12 +353,37 @@ uint8_t process_service_command(uint8_t cmd) {
             break;
         case CMD_SERVICE_VALUE_UP:
             parameter_plus();
+            parameters[parameter_current] = parameter_value;
             break;
         case CMD_SERVICE_VALUE_DOWN:
             parameter_minus();
-            break;
-        case CMD_SERVICE_WRITE:
             parameters[parameter_current] = parameter_value;
+            break;
+        case CMD_SERVICE_EEPROM_SAVE:
+            eeprom_save_parameters();
+#if use_lcd
+            lcd_command(lcd_goto_lower_line);
+            for (unsigned char i=0; i<16;i++) {
+                lcd_data(saved[i]);
+            }
+#endif
+            break;
+        case CMD_SERVICE_EEPROM_LOAD:
+            if(eeprom_load_parameters() ) {
+#if use_lcd
+                lcd_command(lcd_goto_lower_line);
+                for (unsigned char i=0; i<16;i++) {
+                    lcd_data(loaded[i]);
+                }
+#endif
+            } else {
+#if use_lcd
+                lcd_command(lcd_goto_lower_line);
+                for (unsigned char i=0; i<16;i++) {
+                    lcd_data(not_loaded[i]);
+                }
+#endif
+            }
             break;
         default:
             load_parameter();
@@ -342,16 +397,31 @@ uint8_t process_service_command(uint8_t cmd) {
 //----------- INIT -------------------------------------------------------------
 
 void parameters_init() {
-    parameters[id_pwm] = SPEED_DEFAULT;
-    parameters[id_divident] = DIVIDENT_DEFAULT;
-    parameters[id_divider] = DIVIDER_DEFAULT;
-    parameters[id_pwm_max] = SPEED_UPPER_DEFAULT;
-    parameters[id_pwm_min] = SPEED_LOWER_DEFAULT;
-    // this is the count of 'ticks' from encoder between two cons. ovf 
-    parameters[id_dticks] = TICKS_PER_OVF;
-    parameters[id_step_fwd] = DISTANCE_FWD_DEFAULT;
-    parameters[id_step_bkw] = DISTANCE_BKW_DEFAULT;
-    parameters[id_step_turn] = DISTANCE_TURN_DEFAULT;
+    if (eeprom_load_parameters()) {
+#if use_lcd
+        lcd_command(lcd_goto_lower_line);
+        for (unsigned char i=0; i<16;i++) {
+            lcd_data(loaded[i]);
+        }
+#endif
+    } else {
+#if use_lcd
+        lcd_command(lcd_goto_lower_line);
+        for (unsigned char i=0; i<16;i++) {
+            lcd_data(not_loaded[i]);
+        }
+#endif
+        parameters[id_pwm] = SPEED_DEFAULT;
+        parameters[id_divident] = DIVIDENT_DEFAULT;
+        parameters[id_divider] = DIVIDER_DEFAULT;
+        parameters[id_pwm_max] = SPEED_UPPER_DEFAULT;
+        parameters[id_pwm_min] = SPEED_LOWER_DEFAULT;
+        // this is the count of 'ticks' from encoder between two cons. ovf 
+        parameters[id_dticks] = TICKS_PER_OVF;
+        parameters[id_step_fwd] = DISTANCE_FWD_DEFAULT;
+        parameters[id_step_bkw] = DISTANCE_BKW_DEFAULT;
+        parameters[id_step_turn] = DISTANCE_TURN_DEFAULT;
+    }
 }
 
 

@@ -89,13 +89,14 @@
 
 
 // service mode:
-#define CMD_SERVICE_ENTER      button_sync
-#define CMD_SERVICE_LEAVE      button_open
-#define CMD_SERVICE_LIST_UP    button_pause
-#define CMD_SERVICE_LIST_DOWN  button_stop
-#define CMD_SERVICE_VALUE_UP   button_level_plus
-#define CMD_SERVICE_VALUE_DOWN button_level_minus
-#define CMD_SERVICE_WRITE      button_prog
+#define CMD_SERVICE_ENTER        button_sync
+#define CMD_SERVICE_LEAVE        button_open
+#define CMD_SERVICE_LIST_UP      button_pause
+#define CMD_SERVICE_LIST_DOWN    button_stop
+#define CMD_SERVICE_VALUE_UP     button_level_plus
+#define CMD_SERVICE_VALUE_DOWN   button_level_minus
+#define CMD_SERVICE_EEPROM_SAVE  button_prog
+#define CMD_SERVICE_EEPROM_LOAD  button_peak
 
 
 struct Step {

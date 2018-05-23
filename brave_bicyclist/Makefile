@@ -10,7 +10,7 @@ serialport = /dev/ttyS0
 VUSB = ../vusb
 NEC = ../nec
 LCD = ../lcd
-inc60t = -I../include -I$(NEC) -I$(LCD) -I$(VUSB) \
+inc60t = -I$(NEC) -I$(LCD) -I$(VUSB) \
 		-Duse_lcd=$(use_lcd) -Duse_usb=$(use_usb)
 
 

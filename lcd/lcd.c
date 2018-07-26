@@ -19,6 +19,7 @@ void lcd_upper_4bit_command(unsigned char command) {
     en_strobe();
 }
 
+
 void lcd_command(unsigned char command) {
     clear_bit(rs_port, rs_bit);
     data_port = (command & 0xf0) | (data_port & 0x0f);
@@ -27,6 +28,7 @@ void lcd_command(unsigned char command) {
     en_strobe();
 }
 
+
 void lcd_data(char byte) {
     set_bit(rs_port, rs_bit);
     data_port = (byte & 0xf0) | (data_port & 0x0f);
@@ -34,6 +36,7 @@ void lcd_data(char byte) {
     data_port = ((byte<<4) & 0xf0) | (data_port & 0x0f);
     en_strobe();
 }
+
 
 void lcd_init() {
     data_dir |= (data_bits) ;

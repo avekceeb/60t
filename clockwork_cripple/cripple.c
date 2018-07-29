@@ -87,19 +87,32 @@ void transmit(uint8_t data) {
 
 
 #if use_lcd
-char lcd_up_buffer[18];
-char lcd_lo_buffer[18];
+char lcd_up_buffer[16];
+char lcd_lo_buffer[16];
 char msg_privet[6]  = {cyr_p, cyr_r, cyr_i, cyr_v, cyr_e, cyr_t};
 char * msg_forward  = "^^^^ forward ^^^";
 char * msg_backward = "vvv backward vvv";
 char * msg_left     = "<<<<< left <<<<<";
 char * msg_right    = ">>>> right >>>>>";
+void _lcd_print_code(uint8_t c) {
+    cli();
+    sprintf (lcd_lo_buffer, "0x%02x           ", c);
+    lcd_command(lcd_goto_lower_line);
+    for (unsigned char i=0;i<15;i++) {
+        lcd_data(lcd_lo_buffer[i]);
+    }
+    sei();
+}
 #define lcd_message(m) do{\
+    cli();\
     lcd_command(lcd_goto_upper_line);\
     for (unsigned char i=0; i<16;i++){lcd_data(m[i]);}\
+    sei();\
     }while(0)
+#define lcd_print_code(c) _lcd_print_code(c)
 #else
 #define lcd_message(m)
+#define lcd_print_code(c)
 #endif
 
 
@@ -142,12 +155,10 @@ void timer1_init(void) {
 #endif
     rx_data = UDR;
     command = rx_data;
-#if use_lcd
-    if (command >= 0x20 || command <= 0x7e) {
-        lcd_data(command);
-    }
-#endif
-    transmit(rx_data);
+    lcd_print_code(command);
+    transmit(command);
+    transmit('\r');
+    transmit('\n');
 }
 
 

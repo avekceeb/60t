@@ -77,8 +77,19 @@
 #define PWM_MIN 32
 
 
-uint8_t rx_data = 0;
-uint8_t command = 0;
+#define RX_READY 126
+#define RX_CODE 0
+#define RX_LEFT (RX_CODE+1)
+#define RX_RIGHT (RX_LEFT+1)
+#define RX_DONE (RX_RIGHT+1)
+
+uint8_t rx = 0;
+
+char rx_data = 0;
+
+#define rx_buff_sz 16
+uint8_t rx_buffer[rx_buff_sz];
+
 
 void transmit(uint8_t data) {
     while (!(UCSRA & _BV(UDRE)));
@@ -87,6 +98,7 @@ void transmit(uint8_t data) {
 
 
 #if use_lcd
+
 char lcd_up_buffer[16];
 char lcd_lo_buffer[16];
 char msg_privet[6]  = {cyr_p, cyr_r, cyr_i, cyr_v, cyr_e, cyr_t};
@@ -94,25 +106,31 @@ char * msg_forward  = "^^^^ forward ^^^";
 char * msg_backward = "vvv backward vvv";
 char * msg_left     = "<<<<< left <<<<<";
 char * msg_right    = ">>>> right >>>>>";
-void _lcd_print_code(uint8_t c) {
-    cli();
-    sprintf (lcd_lo_buffer, "0x%02x           ", c);
+char * msg_unknown  = "??? unknown ????";
+char * msg_done     = "!!!!! done !!!!!";
+
+void _lcd_print_code() {
+    sprintf (lcd_lo_buffer, "%c  0x%02x  0x%02x   ", rx_buffer[RX_CODE], rx_buffer[RX_LEFT], rx_buffer[RX_RIGHT]);
     lcd_command(lcd_goto_lower_line);
-    for (unsigned char i=0;i<15;i++) {
+    for (uint8_t i=0;i<16;i++) {
         lcd_data(lcd_lo_buffer[i]);
     }
-    sei();
 }
+
 #define lcd_message(m) do{\
     cli();\
     lcd_command(lcd_goto_upper_line);\
-    for (unsigned char i=0; i<16;i++){lcd_data(m[i]);}\
+    for(uint8_t i=0;i<16;i++){lcd_data(m[i]);}\
     sei();\
     }while(0)
-#define lcd_print_code(c) _lcd_print_code(c)
+
+#define lcd_print_code() _lcd_print_code()
+
 #else
+
 #define lcd_message(m)
-#define lcd_print_code(c)
+#define lcd_print_code()
+
 #endif
 
 
@@ -127,7 +145,7 @@ void pause_stop() {
 
 
 void pause_small() {
-    _delay_ms(500);
+    _delay_ms(100);
 }
 
 
@@ -154,11 +172,25 @@ void timer1_init(void) {
     ISR(USART_RX_vect) {
 #endif
     rx_data = UDR;
-    command = rx_data;
-    lcd_print_code(command);
-    transmit(command);
-    transmit('\r');
-    transmit('\n');
+    cli();
+    switch (rx) {
+        case RX_READY:
+            if ('H' == rx_data) {
+                rx = RX_CODE;
+            }
+            break;
+        case RX_LEFT:
+        case RX_RIGHT:
+        case RX_CODE:
+            rx_buffer[rx++] = rx_data;
+            break;
+        case RX_DONE:
+            //lcd_message(msg_done);
+            break;
+        default:
+            lcd_message(msg_unknown);
+    }
+    sei();
 }
 
 
@@ -220,29 +252,36 @@ int main(void) {
 #endif
     /* Set frame format: 8data, 2stop bit */
     //UCSRC = (1<<URSEL)|(1<<USBS)|(3<<UCSZ0);
-    
+
+    rx = RX_READY;
+
     sei();
 
-    while(1) {
-        switch (command) {
-            case 0x73: // stop
-            case 0x20:
-                vehicle_stop();
-                break;
-            case 0x66: // fwd
-                VEHICLE_FWD;
-                break;
-            case 0x62: // bkw
-                VEHICLE_BKW;
-                break;
-            case 0x6c: // left
-                VEHICLE_LFT;
-                break;
-            case 0x72: // right
-                VEHICLE_RGH;
-                break;
+    while (1) {
+        if (RX_DONE == rx) {
+            cli();
+            uint8_t code = rx_buffer[RX_CODE];
+            lcd_print_code();
+            switch (code) {
+                case 's': // stop
+                    vehicle_stop();
+                    break;
+                case 'f': // fwd
+                    VEHICLE_FWD;
+                    break;
+                case 'b': // bkw
+                    VEHICLE_BKW;
+                    break;
+                case 'l': // left
+                    VEHICLE_LFT;
+                    break;
+                case 'r': // right
+                    VEHICLE_RGH;
+                    break;
+            }
+            rx = RX_READY;
+            sei();
         }
-        command = 0;
         pause_small();
     }
 }

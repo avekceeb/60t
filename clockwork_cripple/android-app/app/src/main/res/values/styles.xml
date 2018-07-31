@@ -1,0 +1,17 @@
+<resources>
+
+    <style name="AppTheme" parent="Theme.AppCompat.Light.DarkActionBar">
+        <!-- Customize your theme here. -->
+        <item name="colorPrimary">@color/radarColor</item>
+        <item name="colorPrimaryDark">@color/radarColor</item>
+        <item name="colorAccent">@color/colorAccent</item>
+        <item name="android:textColorPrimary">@color/radarText</item>
+        <item name="android:textColorPrimaryInverse">@color/radarText</item>
+    </style>
+
+    <!--style name="ListFont" parent="@android:style/Widget.ListView">
+        <item name="android:textColor">#FF0000</item>
+        <item name="android:typeface">sans</item>
+    </style-->
+
+</resources>

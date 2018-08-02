@@ -44,7 +44,6 @@
 // asyncronous normal mode:
 #define MYUBRR (F_CPU/16/BAUD-1)
 
-
 #define BIT_FWD_R PC3
 #define BIT_BKW_R PC2
 #define BIT_FWD_L PC1
@@ -71,49 +70,44 @@
 #define TIMER1_FPWM_DISABLE do{TCCR1B |= _BV(WGM13) | _BV(WGM12);}while(0)
 
 
-// settings:
-
-#define PWM_MAX 80
-#define PWM_MIN 32
-
-
 #define RX_READY 126
-#define RX_CODE 0
-#define RX_LEFT (RX_CODE+1)
+#define RX_CODE  0
+#define RX_LEFT  (RX_CODE+1)
 #define RX_RIGHT (RX_LEFT+1)
-#define RX_DONE (RX_RIGHT+1)
+#define RX_DONE  (RX_RIGHT+1)
 
-uint8_t rx = 0;
 
 char rx_data = 0;
 
+// rx is an index inside a rx_buffer
+uint8_t rx = 0;
 #define rx_buff_sz 16
 uint8_t rx_buffer[rx_buff_sz];
 
+uint8_t commands = 0;
+uint8_t timer0_ovf = 0;
+uint8_t err = '.';
 
-void transmit(uint8_t data) {
-    while (!(UCSRA & _BV(UDRE)));
-    UDR = data;
-}
 
+//---------- LC display (optional)----------------------------------------------
 
 #if use_lcd
 
-char lcd_up_buffer[16];
-char lcd_lo_buffer[16];
+char lcd_buffer[16];
 char msg_privet[6]  = {cyr_p, cyr_r, cyr_i, cyr_v, cyr_e, cyr_t};
-char * msg_forward  = "^^^^ forward ^^^";
-char * msg_backward = "vvv backward vvv";
-char * msg_left     = "<<<<< left <<<<<";
-char * msg_right    = ">>>> right >>>>>";
-char * msg_unknown  = "??? unknown ????";
-char * msg_done     = "!!!!! done !!!!!";
 
-void _lcd_print_code() {
-    sprintf (lcd_lo_buffer, "%c  0x%02x  0x%02x   ", rx_buffer[RX_CODE], rx_buffer[RX_LEFT], rx_buffer[RX_RIGHT]);
+void _lcd_print_status(void)
+{
+    sprintf (lcd_buffer,
+        "%02x %c L:%02x R:%02x %c",
+        commands,
+        rx_buffer[RX_CODE],
+        rx_buffer[RX_LEFT],
+        rx_buffer[RX_RIGHT],
+        err);
     lcd_command(lcd_goto_lower_line);
     for (uint8_t i=0;i<16;i++) {
-        lcd_data(lcd_lo_buffer[i]);
+        lcd_data(lcd_buffer[i]);
     }
 }
 
@@ -124,32 +118,65 @@ void _lcd_print_code() {
     sei();\
     }while(0)
 
-#define lcd_print_code() _lcd_print_code()
+#define lcd_print_status() _lcd_print_status()
 
 #else
 
 #define lcd_message(m)
-#define lcd_print_code()
+#define lcd_print_status()
 
 #endif
 
 
-void pause_run() {
-    _delay_ms(3500);
+//------------------------------------------------------------------------------
+
+void transmit(uint8_t data)
+{
+    while (!(UCSRA & _BV(UDRE)));
+    UDR = data;
 }
 
 
-void pause_stop() {
-    _delay_ms(1500);
+// drive commands
+
+void vehicle_run(uint8_t bridge, uint8_t pwm_l, uint8_t pwm_r)
+{
+    TIMER1_FPWM_ENABLE;
+    PWM_R = pwm_r;
+    PWM_L = pwm_l;
+    BRIDGE = bridge;
+    // reset stop-guard timer
+    timer0_ovf = 0;
+    TCNT0 = 0;
 }
 
 
-void pause_small() {
-    _delay_ms(100);
+void vehicle_stop(void)
+{
+    TIMER1_FPWM_DISABLE;
+    PORTB &= ~(_BV(BIT_PWM_L) | _BV(BIT_PWM_R));
+    BRIDGE = CMD_BREAK_ALL;
+    timer0_ovf = 0;
+    TCNT0 = 0;
 }
 
 
-void timer1_init(void) {
+void init_timer0(void)
+{
+    // 5 sec - maximum time of running single command
+    // F_CPU (12e6)
+    // ovf t = (12e6 * t) / (1024*255)
+    // ovf 5 = 230
+    // ovf 4 = 184
+    TIMSK |= (_BV(TOIE0) | _BV(TOIE2));
+    // prescale 1024
+    TCCR0 = _BV(CS02) | _BV(CS00);
+    TCNT0 = 0;
+}
+
+
+void init_timer1(void)
+{
     // WGM 11 12 13 = Fast PWM top=ICR1 Upadate OCR1* at BOTTOM
     // CS10   = no prescaling => 46875.0 Hz
     // CS11   = prescaling 8  => 5860 Hz
@@ -164,7 +191,8 @@ void timer1_init(void) {
 }
 
 
-// interruptions
+
+//----------- Interruptions ----------------------------------------------------
 
 #ifdef __AVR_ATmega8__
     ISR(USART_RXC_vect) {
@@ -172,11 +200,12 @@ void timer1_init(void) {
     ISR(USART_RX_vect) {
 #endif
     rx_data = UDR;
-    cli();
     switch (rx) {
         case RX_READY:
             if ('H' == rx_data) {
                 rx = RX_CODE;
+            } else {
+                err = '!';
             }
             break;
         case RX_LEFT:
@@ -185,40 +214,25 @@ void timer1_init(void) {
             rx_buffer[rx++] = rx_data;
             break;
         case RX_DONE:
-            //lcd_message(msg_done);
             break;
         default:
-            lcd_message(msg_unknown);
+            err = '*';
     }
-    sei();
 }
 
 
-// drive commands
 
-void vehicle_run(uint8_t bridge, uint8_t pwm_l, uint8_t pwm_r) {
-    TIMER1_FPWM_ENABLE;
-    PWM_R = pwm_r;
-    PWM_L = pwm_l;
-    BRIDGE = bridge;
+ISR(TIMER0_OVF_vect)
+{
+    if (++timer0_ovf >= 220 /* ~4.5 sec */ ) {
+        //timer0_ovf = 0;
+        vehicle_stop();
+    }
 }
 
 
-void vehicle_stop() {
-    TIMER1_FPWM_DISABLE;
-    PORTB &= ~(_BV(BIT_PWM_L) | _BV(BIT_PWM_R));
-    BRIDGE = CMD_BREAK_ALL;
-}
-
-#define VEHICLE_FWD vehicle_run(CMD_MOVE_FWD, PWM_MAX, PWM_MAX)
-#define VEHICLE_BKW vehicle_run(CMD_MOVE_BKW, PWM_MAX, PWM_MAX)
-#define VEHICLE_LFT vehicle_run(CMD_TURN_LEFT, PWM_MAX, PWM_MAX)
-#define VEHICLE_RGH vehicle_run(CMD_TURN_RIGHT, PWM_MAX, PWM_MAX)
-
-
-// main
-
-int main(void) {
+int main(void)
+{
 
     // pull-ups:
     PORTD |= _BV(PD0);
@@ -229,7 +243,7 @@ int main(void) {
     // USART TX
     DDRD = _BV(PD1);
 
-    timer1_init();
+    init_timer1();
 
 #if use_lcd
     lcd_init();
@@ -239,10 +253,10 @@ int main(void) {
     }
 #endif
 
-    /* Set baud rate */
+    // Set baud rate
     UBRRH = (unsigned char)(MYUBRR>>8);
     UBRRL = (unsigned char)MYUBRR;
-    /* Enable receiver and transmitter and Rx Int*/
+    // Enable receiver and transmitter and Rx Int
     UCSRB = _BV(RXEN) | _BV(TXEN) | _BV(RXCIE); // | TXIE
 #ifdef __AVR_ATmega8__
     // 8 bit ; 1 stop ; no parity ; asynchronous
@@ -250,38 +264,51 @@ int main(void) {
 #else
     UCSRC = (1 << USBS) | (3 << UCSZ0);	// asynchron 8n1
 #endif
-    /* Set frame format: 8data, 2stop bit */
+    // Set frame format: 8data, 2stop bit
     //UCSRC = (1<<URSEL)|(1<<USBS)|(3<<UCSZ0);
 
     rx = RX_READY;
+    
+    init_timer0();
 
     sei();
 
     while (1) {
         if (RX_DONE == rx) {
             cli();
+            if (RX_DONE != rx) {
+                goto skip;
+            }
             uint8_t code = rx_buffer[RX_CODE];
-            lcd_print_code();
+            uint8_t l = rx_buffer[RX_LEFT];
+            uint8_t r = rx_buffer[RX_RIGHT];
             switch (code) {
                 case 's': // stop
                     vehicle_stop();
                     break;
                 case 'f': // fwd
-                    VEHICLE_FWD;
+                    vehicle_run(CMD_MOVE_FWD, l, r);
                     break;
                 case 'b': // bkw
-                    VEHICLE_BKW;
+                    vehicle_run(CMD_MOVE_BKW, l, r);
                     break;
                 case 'l': // left
-                    VEHICLE_LFT;
+                    vehicle_run(CMD_TURN_LEFT, l, r);
                     break;
                 case 'r': // right
-                    VEHICLE_RGH;
+                    vehicle_run(CMD_TURN_RIGHT, l, r);
                     break;
+                default:
+                    err = '?';
             }
+            commands++;
+            lcd_print_status();
+            err = '.';
             rx = RX_READY;
+skip:
             sei();
         }
-        pause_small();
+        // ???
+        _delay_ms(200);
     }
 }

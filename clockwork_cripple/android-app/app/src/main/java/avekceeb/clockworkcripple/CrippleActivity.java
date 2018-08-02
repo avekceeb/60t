@@ -1,5 +1,7 @@
 package avekceeb.clockworkcripple;
 
+// based on https://github.com/bauerjj/Android-Simple-Bluetooth-Example
+
 import android.Manifest;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
@@ -35,8 +37,19 @@ import java.util.UUID;
 
 public class CrippleActivity extends AppCompatActivity {
 
-    private final static int amplitude = 255;
+    private final static int REQUEST_ENABLE_BT = 1;
+    private final static int MESSAGE_READ = 2;
+    private final static int CONNECTING_STATUS = 3;
+
+    private final static int amplitude         = 70;
+    private final static float delta_threshold = amplitude * 0.2f;
+    private final static float gap_threshold   = amplitude * 0.1f;
+
     private final static double pi4 = Math.PI/4;
+
+    private int commands = 0;
+    private float last_x = 0;
+    private float last_y = 0;
     private TextView v_status;
     private ListView v_list;
     private TextView v_show;
@@ -51,10 +64,6 @@ public class CrippleActivity extends AppCompatActivity {
     private BluetoothSocket mBTSocket = null;
     private static final UUID BTMODULEUUID = UUID.fromString(
             "00001101-0000-1000-8000-00805F9B34FB");
-
-    private final static int REQUEST_ENABLE_BT = 1;
-    private final static int MESSAGE_READ = 2;
-    private final static int CONNECTING_STATUS = 3;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -82,7 +91,7 @@ public class CrippleActivity extends AppCompatActivity {
                 PackageManager.PERMISSION_GRANTED)
             ActivityCompat.requestPermissions(
                     this,
-                    new String[]{Manifest.permission.ACCESS_COARSE_LOCATION},
+                    new String[] {Manifest.permission.ACCESS_COARSE_LOCATION},
                     1);
 
 
@@ -115,77 +124,85 @@ public class CrippleActivity extends AppCompatActivity {
             Toast.makeText(getApplicationContext(),
                     "Bluetooth device not found!",
                     Toast.LENGTH_SHORT).show();
+            return;
         }
-        else {
-            v_show.setOnClickListener(new View.OnClickListener() {
+
+        v_show.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                listPairedDevices(v);
+            }
+        });
+
+        v_image.setOnTouchListener(
+            new View.OnTouchListener() {
                 @Override
-                public void onClick(View v){
-                    listPairedDevices(v);
-                }
-            });
-            
-            v_image.setOnTouchListener(
-                    new View.OnTouchListener() {
-                        @Override
-                        public boolean onTouch(View view, MotionEvent ev) {
-                            byte[] command = new byte[] {
-                                    (byte)'H', (byte)'K', (byte)'K', (byte)'K', (byte)'K'};
-                            int action = ev.getAction();
-                            if (MotionEvent.ACTION_UP == action) {
-                                v_status.setText("...stop");
-                                if (connection != null) {
-                                    connection.write(
-                                            new byte[] {(byte)'H', (byte)'s', (byte)0, (byte)0}
-                                    );
-                                }
-                                return true;
-                            }
-                            int w = view.getWidth() / 2;
-                            int h = view.getHeight() / 2;
-                            int radius = Math.min(w, h);
-                            float x = ev.getX();
-                            float y = ev.getY();
-                            x -= w;
-                            y -= h;
-                            x = amplitude * x / radius;
-                            y = -amplitude * y / radius;
-                            double r = Math.sqrt(x*x + y*y);
-                            if (r > amplitude) {
-                                v_status.setText(String.format("...too far", x, y));
-                                return true;
-                            } else if (r < amplitude / 3) {
-                                v_status.setText(String.format("%f %f stopped", x, y));
-                                if (connection != null) {
-                                    connection.write(
-                                            new byte[] {(byte)'H', (byte)'s', (byte)5, (byte)5}
-                                    );
-                                    return true;
-                                }
-                            }
-                            // counter-clockwise from X axis
-                            double angle = Math.atan2(y, x);
-                            byte dir = 's';
-                            if (angle >= pi4 && angle < 3*pi4) {
-                                dir = 'f';
-                            } else if (Math.abs(angle) >= 3*pi4) {
-                                dir = 'l';
-                            } else if (angle <= -pi4 && angle > -3*pi4) {
-                                dir = 'b';
-                            } else if (Math.abs(angle) < pi4) {
-                                dir = 'r';
-                            }
-                            v_status.setText(String.format("%f %f", x, y));
-                            command[1] = dir;
-                            command[2] = (byte)(0xff & Math.round(r));
-                            command[3] = (byte)(0xff & Math.round(r));
-                            if (connection != null) {
-                                connection.write(command);
-                            }
+                public boolean onTouch(View view, MotionEvent ev) {
+                    int action = ev.getAction();
+                    if (MotionEvent.ACTION_UP == action) {
+                        v_status.setText(String.format("%5d STOP UP", ++commands));
+                        if (connection != null) {
+                            connection.write(
+                                    new byte[] {(byte)'H', (byte)'s', (byte)0, (byte)0}
+                            );
+                        }
+                        return false;
+                    }
+                    int w = view.getWidth() / 2;
+                    int h = view.getHeight() / 2;
+                    int radius = Math.min(w, h);
+                    float x = ev.getX();
+                    float y = ev.getY();
+                    x -= w;
+                    y -= h;
+                    x = amplitude * x / radius;
+                    y = -amplitude * y / radius;
+                    if (delta_threshold > ((Math.abs(last_x - x) + Math.abs(last_y - y)))) {
+                        // Change is too small, don't bother radio
+                        return true;
+                    }
+                    last_x = x;
+                    last_y = y;
+                    double r = Math.sqrt(x*x + y*y);
+                    if (r > amplitude) {
+                        v_status.setText("...");
+                        return true;
+                    } else if (r < gap_threshold) {
+                        v_status.setText(String.format("%5d STOP x=%+3.0f y=%+3.0f r=%+3.0f q=?",
+                                ++commands, x, y, (float)r));
+                        if (connection != null) {
+                            connection.write(
+                                    new byte[] {(byte)'H', (byte)'s', (byte)5, (byte)5}
+                            );
                             return true;
                         }
                     }
-            );
-        }
+                    // counter-clockwise from X axis
+                    double angle = Math.atan2(y, x);
+                    byte dir = 's';
+                    if (angle >= pi4 && angle < 3*pi4) {
+                        dir = 'f';
+                    } else if (Math.abs(angle) >= 3*pi4) {
+                        dir = 'l';
+                    } else if (angle <= -pi4 && angle > -3*pi4) {
+                        dir = 'b';
+                    } else if (Math.abs(angle) < pi4) {
+                        dir = 'r';
+                    }
+                    v_status.setText(String.format("%5d  RUN x=%+3.0f y=%+3.0f r=%+3.0f q=%+3.0f",
+                            ++commands, x, y, (float)r, (float)(45*angle/pi4)));
+                    byte[] command = new byte[] {
+                            (byte)'H', (byte)'K', (byte)'K', (byte)'K'};
+                    command[1] = dir;
+                    command[2] = (byte)(0xff & Math.round(r));
+                    command[3] = command[2];
+                    if (connection != null) {
+                        connection.write(command);
+                    }
+                    return true;
+                }
+            }
+        );
     }
 
     // Enter here after user selects "yes" or "no" to enabling radio
@@ -204,68 +221,10 @@ public class CrippleActivity extends AppCompatActivity {
         }
     }
 
-//    private void bluetoothOn(View view){
-//        if (!bt.isEnabled()) {
-//            Intent enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
-//            startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT);
-//            v_status.setText("Bluetooth enabled");
-//            Toast.makeText(getApplicationContext(),"Bluetooth turned on",
-//                    Toast.LENGTH_SHORT).show();
-//
-//        }
-//        else{
-//            Toast.makeText(getApplicationContext(),"Bluetooth is already on", Toast.LENGTH_SHORT).show();
-//        }
-//    }
-//
-//    private void bluetoothOff(View view){
-//        bt.disable(); // turn off
-//        v_status.setText("Bluetooth disabled");
-//        Toast.makeText(getApplicationContext(),
-//                "Bluetooth turned Off", Toast.LENGTH_SHORT).show();
-//    }
-//
-//
-//    private void discover(View view){
-//        // Check if the device is already discovering
-//        if(bt.isDiscovering()){
-//            bt.cancelDiscovery();
-//            Toast.makeText(getApplicationContext(),
-//                    "Discovery stopped",Toast.LENGTH_SHORT).show();
-//        }
-//        else {
-//            if(bt.isEnabled()) {
-//                bt_array.clear(); // clear items
-//                bt.startDiscovery();
-//                Toast.makeText(getApplicationContext(),
-//                        "Discovery started", Toast.LENGTH_SHORT).show();
-//                registerReceiver(blReceiver,
-//                        new IntentFilter(BluetoothDevice.ACTION_FOUND));
-//            }
-//            else {
-//                Toast.makeText(getApplicationContext(),
-//                        "Bluetooth not on", Toast.LENGTH_SHORT).show();
-//            }
-//        }
-//    }
-//
-//    final BroadcastReceiver blReceiver = new BroadcastReceiver() {
-//        @Override
-//        public void onReceive(Context context, Intent intent) {
-//            String action = intent.getAction();
-//            if(BluetoothDevice.ACTION_FOUND.equals(action)){
-//                BluetoothDevice device = intent.getParcelableExtra(
-//                        BluetoothDevice.EXTRA_DEVICE);
-//                // add the name to the list
-//                bt_array.add(device.getName() + " " + device.getAddress());
-//                bt_array.notifyDataSetChanged();
-//            }
-//        }
-//    };
-
 
     private void listPairedDevices(View view){
         paired = bt.getBondedDevices();
+        // TODO: if list is empty
         if(bt.isEnabled()) {
             // put it's one to the adapter
             for (BluetoothDevice device : paired) {
@@ -364,9 +323,6 @@ public class CrippleActivity extends AppCompatActivity {
             mmSocket = socket;
             InputStream tmpIn = null;
             OutputStream tmpOut = null;
-
-            // Get the input and output streams, using temp objects because
-            // member streams are final
             try {
                 tmpIn = socket.getInputStream();
                 tmpOut = socket.getOutputStream();

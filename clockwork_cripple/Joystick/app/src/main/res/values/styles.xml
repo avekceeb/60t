@@ -9,9 +9,13 @@
         <item name="android:textColorPrimaryInverse">@color/radarText</item>
     </style>
 
-    <!--style name="ListFont" parent="@android:style/Widget.ListView">
-        <item name="android:textColor">#FF0000</item>
-        <item name="android:typeface">sans</item>
-    </style-->
+    <style name="AppTheme.NoActionBar">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+    </style>
+
+    <style name="AppTheme.AppBarOverlay" parent="ThemeOverlay.AppCompat.Dark.ActionBar" />
+
+    <style name="AppTheme.PopupOverlay" parent="ThemeOverlay.AppCompat.Light" />
 
 </resources>

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="curve">
+        <item name="Smooth">Smooth</item>
+        <item name="Sharp">Sharp</item>
+        <item name="Linear">Linear</item>
+    </string-array>
+
+    <string-array name="curve_values">
+        <item name="Smooth">1</item>
+        <item name="Sharp">2</item>
+        <item name="Linear">3</item>
+    </string-array>
+</resources>

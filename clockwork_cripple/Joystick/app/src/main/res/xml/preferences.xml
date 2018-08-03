@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen
+    xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <PreferenceCategory
+        android:title="Blah Settings"
+        android:key="settings_common">
+
+        <CheckBoxPreference
+            android:key="flag"
+            android:summary="Flag"
+            android:title="Flag Blah"
+            android:defaultValue="true"/>
+
+        <ListPreference
+            android:key="list"
+            android:title="List of wheel control types"
+            android:summary="....."
+            android:defaultValue="None"
+            android:entries="@array/curve"
+            android:entryValues="@array/curve_values"
+            android:dependency="flag"/>
+
+        <EditTextPreference
+            android:key="amplitude"
+            android:title="Amplitude"
+            android:summary="...."
+            android:dialogTitle="ttt"
+            android:dialogMessage="Integer positive value less than 255"
+            android:defaultValue="70"
+            android:inputType="numberDecimal"/>
+
+        <EditTextPreference
+            android:key="sensitivity"
+            android:title="Sensitivity"
+            android:summary="...."
+            android:dialogTitle="ttt"
+            android:dialogMessage="Float value 0.0 .. 1.0"
+            android:defaultValue="0.1"
+            android:inputType="numberDecimal"/>
+
+        <EditTextPreference
+            android:key="gap"
+            android:title="Gap"
+            android:summary="...."
+            android:dialogTitle="ttt"
+            android:dialogMessage="Float value 0.0 .. 1.0"
+            android:defaultValue="0.2"
+            android:inputType="numberDecimal"/>
+
+    </PreferenceCategory>
+
+
+</PreferenceScreen>

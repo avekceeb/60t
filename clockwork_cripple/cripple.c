@@ -25,6 +25,35 @@
 
 */
 
+
+
+/*
+
+    Interrupt Vectors (in order of their priority)
+    ----------------------------------------------
+1   0x000   RESET External Pin, Power-on Reset, Brown-out Reset, and Watchdog Reset
+2   0x001   INT0 External Interrupt Request 0
+3   0x002   INT1 External Interrupt Request 1
+4   0x003   TIMER2 COMP Timer/Counter2 Compare Match
+5   0x004   TIMER2 OVF Timer/Counter2 Overflow
+6   0x005   TIMER1 CAPT Timer/Counter1 Capture Event
+7   0x006   TIMER1 COMPA Timer/Counter1 Compare Match A
+8   0x007   TIMER1 COMPB Timer/Counter1 Compare Match B
+9   0x008   TIMER1 OVF Timer/Counter1 Overflow
+10  0x009   TIMER0 OVF Timer/Counter0 Overflow
+11  0x00A   SPI, STC Serial Transfer Complete
+12  0x00B   USART, RXC USART, Rx Complete
+13  0x00C   USART, UDRE USART Data Register Empty
+14  0x00D   USART, TXC USART, Tx Complete
+15  0x00E   ADC ADC Conversion Complete
+16  0x00F   EE_RDY EEPROM Ready
+17  0x010   ANA_COMP Analog Comparator
+18  0x011   TWI Two-wire Serial Interface
+19  0x012   SPM_RDY Store Program Memory Ready
+
+
+ */
+
 //------------------------------------------------------------------------------
 
 #define F_CPU 12000000UL
@@ -65,9 +94,21 @@
 #define CMD_TURN_RIGHT   0b00001001
 #define CMD_BREAK_ALL    0b00000000
 
+// 1024
+#define TIMER0_START  do{TCNT0=0;TCCR0=_BV(CS02)|_BV(CS00);}while(0)
+// 64
+//#define TIMER0_START  do{TCNT0=0;TCCR0=_BV(CS01)|_BV(CS00);}while(0)
+#define TIMER0_STOP   do{TCCR0=0;TCNT0=0;}while(0)
 
-#define TIMER1_FPWM_ENABLE do{TCCR1B |= _BV(WGM13) | _BV(WGM12) | _BV(CS11);}while(0)
-#define TIMER1_FPWM_DISABLE do{TCCR1B |= _BV(WGM13) | _BV(WGM12);}while(0)
+// CS11 - prescaler 8
+#define TIMER1_FPWM_ENABLE  do{\
+    TCCR1A|=_BV(COM1A1)|_BV(COM1B1)|_BV(WGM11);\
+    TCCR1B|=_BV(WGM13)|_BV(WGM12)|_BV(CS11);\
+    }while(0)
+
+#define TIMER1_FPWM_DISABLE do{\
+    TCCR1A&=~(_BV(COM1A1)|_BV(COM1B1)|_BV(COM1A0)|_BV(COM1B0));\
+    }while(0)
 
 
 #define RX_READY 126
@@ -85,16 +126,27 @@ uint8_t rx = 0;
 uint8_t rx_buffer[rx_buff_sz];
 
 uint8_t commands = 0;
-uint8_t timer0_ovf = 0;
+uint16_t timer0_ovf = 0;
 uint8_t err = '.';
 
+uint16_t ticks_r = 0;
 
 //---------- LC display (optional)----------------------------------------------
 
 #if use_lcd
 
+char lcd_buffer_upper[16];
 char lcd_buffer[16];
 char msg_privet[6]  = {cyr_p, cyr_r, cyr_i, cyr_v, cyr_e, cyr_t};
+
+void _lcd_print_status_upper(void)
+{
+    sprintf (lcd_buffer_upper, "sp:%02x time:%.5d", commands /*fake*/, timer0_ovf);
+    lcd_command(lcd_goto_upper_line);
+    for (uint8_t i=0;i<16;i++) {
+        lcd_data(lcd_buffer_upper[i]);
+    }
+}
 
 void _lcd_print_status(void)
 {
@@ -119,11 +171,13 @@ void _lcd_print_status(void)
     }while(0)
 
 #define lcd_print_status() _lcd_print_status()
+#define lcd_print_status_upper() _lcd_print_status_upper()
 
 #else
 
 #define lcd_message(m)
 #define lcd_print_status()
+#define lcd_print_status_upper()
 
 #endif
 
@@ -137,6 +191,20 @@ void transmit(uint8_t data)
 }
 
 
+void start_measuring_timer(void)
+{
+    timer0_ovf = 0;
+    TIMER0_START;
+}
+
+
+void stop_measuring_timer(void)
+{
+    TIMER0_STOP;
+    timer0_ovf = 0;
+}
+
+
 // drive commands
 
 void vehicle_run(uint8_t bridge, uint8_t pwm_l, uint8_t pwm_r)
@@ -145,19 +213,26 @@ void vehicle_run(uint8_t bridge, uint8_t pwm_l, uint8_t pwm_r)
     PWM_R = pwm_r;
     PWM_L = pwm_l;
     BRIDGE = bridge;
-    // reset stop-guard timer
-    timer0_ovf = 0;
-    TCNT0 = 0;
+    start_measuring_timer();
 }
 
 
 void vehicle_stop(void)
 {
+    stop_measuring_timer();
     TIMER1_FPWM_DISABLE;
-    PORTB &= ~(_BV(BIT_PWM_L) | _BV(BIT_PWM_R));
+    PORTB &= ~(_BV(BIT_PWM_L)|_BV(BIT_PWM_R));
     BRIDGE = CMD_BREAK_ALL;
-    timer0_ovf = 0;
-    TCNT0 = 0;
+}
+
+
+//------------------------------------------------------------------------------
+
+void init_external_interrupts(void)
+{
+    GIMSK = /*_BV(INT0) |*/ _BV(INT1);
+    // The falling edge of INT0 and INT1 generates an interrupt request
+    MCUCR = _BV(ISC11) | _BV(ISC01);
 }
 
 
@@ -169,8 +244,7 @@ void init_timer0(void)
     // ovf 5 = 230
     // ovf 4 = 184
     TIMSK |= (_BV(TOIE0) | _BV(TOIE2));
-    // prescale 1024
-    TCCR0 = _BV(CS02) | _BV(CS00);
+    // prescale 1024 will be set during TIMER0_START
     TCNT0 = 0;
 }
 
@@ -182,14 +256,12 @@ void init_timer1(void)
     // CS11   = prescaling 8  => 5860 Hz
     // COM1*1 = Clear OC1A/OC1B on Compare Match when up-counting.
     //          Set OC1A/OC1B on Compare Match when downcounting.
-    TCCR1A |= _BV(COM1A1) | _BV(COM1B1) | _BV(WGM11);
-    TIMER1_FPWM_ENABLE;
+    //TIMER1_FPWM_ENABLE; - will be done on 'run' command
     TCNT1 = 0x00;
     ICR1 =  0xff;
     OCR1A = 0x00;
     OCR1B = 0x00;
 }
-
 
 
 //----------- Interruptions ----------------------------------------------------
@@ -221,15 +293,28 @@ void init_timer1(void)
 }
 
 
-
 ISR(TIMER0_OVF_vect)
 {
-    if (++timer0_ovf >= 220 /* ~4.5 sec */ ) {
-        //timer0_ovf = 0;
+    ++timer0_ovf;
+    if (++timer0_ovf >= 220) { //  => ~4.5 sec
         vehicle_stop();
     }
 }
 
+
+ISR(INT1_vect)
+{
+    _delay_us(20);
+    ticks_r++;
+    if (ticks_r >= 30) {
+        vehicle_stop();
+        ticks_r = 0;
+        //lcd_print_status_upper();
+    }
+}
+
+
+//------------------------------------------------------------------------------
 
 int main(void)
 {
@@ -268,10 +353,25 @@ int main(void)
     //UCSRC = (1<<URSEL)|(1<<USBS)|(3<<UCSZ0);
 
     rx = RX_READY;
+
+    init_external_interrupts();
     
     init_timer0();
 
     sei();
+
+#if 0
+    // calibration
+    commands = 80;
+    while (commands >= 10) {
+        err = 'r';
+        vehicle_run(CMD_MOVE_FWD, commands, commands);
+        while (err != 's') {
+            _delay_ms(300);
+        }
+    }
+#endif
+
 
     while (1) {
         if (RX_DONE == rx) {
@@ -311,4 +411,5 @@ skip:
         // ???
         _delay_ms(200);
     }
+
 }

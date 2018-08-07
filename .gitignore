@@ -35,12 +35,12 @@
 *.lss
 
 # Misc
+clockwork_cripple/cripple.S
 *.iml
 .gradle
-/local.properties
-/.idea/workspace.xml
-/.idea/libraries
-/build
-/captures
+local.properties
+.idea
+build
+captures
 .externalNativeBuild
 

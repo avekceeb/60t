@@ -90,11 +90,24 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private class Slow implements WheelFunctor {
+        public float getSpeed(float speed, float disbalance) {
+            float s = Math.abs(speed);
+            if (disbalance < 0.0) {
+                return s * disbalance / amplitude + s;
+            } else if (disbalance > 0.0) {
+                return -1 * s * disbalance / amplitude + s;
+            }
+            return s;
+        }
+    }
+
     private WheelFunctor getWheelFunctor(String type) {
         switch (type) {
             case "1": return new Smooth();
             case "2": return new Sharp();
             case "3": return new Linear();
+            case "4": return new Slow();
             default: return new WheelFunctor() {
                 @Override
                 public float getSpeed(float speed, float disbalance) {

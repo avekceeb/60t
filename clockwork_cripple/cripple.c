@@ -4,19 +4,19 @@
                                atmega8
                              +---------+
                 (RESET) PC6 -| 1     28|- PC5 (ADC5/SCL)
-  command x-----> (RXD) PD0 -| 2     27|- PC4 (ADC4/SDA)
-  [reply] <-----x (TXD) PD1 -| 3     26|- PC3 (ADC3) ----> fwd R
+  command ------> (RXD) PD0 -| 2     27|- PC4 (ADC4/SDA)
+  [reply] <------ (TXD) PD1 -| 3     26|- PC3 (ADC3) ----> fwd R
   enc L x------->(INT0) PD2 -| 4     25|- PC2 (ADC2) ----> bkw R
   enc R x------->(INT1) PD3 -| 5     24|- PC1 (ADC1) ----> fwd L
   lcd:d4 <---- (XCK/T0) PD4 -| 6     23|- PC0 (ADC0) ----> bkw L
                         VCC -| 7     22|- GND
                         GND -| 8     21|- AREF
           (XTAL1/TOSC1) PB6 -| 9     20|- AVCC
-          (XTAL2/TOSC2) PB7 -|10     19|- PB5 (SCK)
+          (XTAL2/TOSC2) PB7 -|10     19|- PB5 (SCK) <--- rear sensor
   lcd:d5 <------   (T1) PD5 -|11     18|- PB4 (MISO)     ----> lcd:rs
   lcd:d6 <------ (AIN0) PD6 -|12     17|- PB3 (MOSI/OC2) ----> lcd:en
   lcd:d7 <------ (AIN1) PD7 -|13     16|- PB2 (SS/OC1B) ----> pwm L
-                 (ICP1) PB0 -|14     15|- PB1 (OC1A)    ----> pwm R
+  front sens --> (ICP1) PB0 -|14     15|- PB1 (OC1A)    ----> pwm R
                              +---------+
 
      Timer 0 - L motor speed control CTC mode
@@ -85,8 +85,12 @@
 #define PWM_R OCR1B
 #define PWM_L OCR1A
 
+// TODO: now writig whole port,
+// wasting 2 pins
 #define BRIDGE PORTC
 
+#define SENSOR_FRONT PB0
+#define SENSOR_REAR  PB5
 
 #define CMD_MOVE_FWD     0b00001010
 #define CMD_MOVE_BKW     0b00000101
@@ -226,6 +230,16 @@ void vehicle_stop(void)
 }
 
 
+void poll_sensors(void)
+{
+    // low level on sensors = obstacle
+    uint8_t no_front_obstacle = PINB && _BV(SENSOR_FRONT);
+    uint8_t no_rear_obstacle = PINB && _BV(SENSOR_REAR);
+    if ((!no_front_obstacle) || (!no_rear_obstacle)) {
+        vehicle_stop();
+    }
+}
+
 //------------------------------------------------------------------------------
 
 void init_external_interrupts(void)
@@ -320,11 +334,14 @@ int main(void)
 {
 
     // pull-ups:
+    // Rx
     PORTD |= _BV(PD0);
-    // set outputs:
-    DDRB = _BV(BIT_PWM_L) | _BV(BIT_PWM_R) | _BV(PB0) /*LED*/;
-    DDRC = _BV(BIT_FWD_R) | _BV(BIT_BKW_R) | _BV(BIT_FWD_L) | _BV(BIT_BKW_L);
+    // proximity sensors
+    PORTB |= _BV(SENSOR_FRONT) | _BV(SENSOR_REAR);
 
+    // set outputs:
+    DDRB = _BV(BIT_PWM_L) | _BV(BIT_PWM_R);
+    DDRC = _BV(BIT_FWD_R) | _BV(BIT_BKW_R) | _BV(BIT_FWD_L) | _BV(BIT_BKW_L);
     // USART TX
     DDRD = _BV(PD1);
 
@@ -408,7 +425,7 @@ int main(void)
 skip:
             sei();
         }
-        // ???
+        poll_sensors();
         _delay_ms(200);
     }
 

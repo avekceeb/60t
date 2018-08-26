@@ -415,6 +415,9 @@ int main(void)
                 case 'r': // right
                     vehicle_run(CMD_TURN_RIGHT, l, r);
                     break;
+                case 't': // test
+                    do_test();
+                    break;
                 default:
                     err = '?';
             }
